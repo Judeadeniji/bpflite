@@ -6,9 +6,10 @@ import (
 )
 
 const (
-	TypeExec = 1
-	TypeOpen = 2
-	TypeNet  = 3
+	TypeExec   = 1
+	TypeOpen   = 2
+	TypeNet    = 3
+	TypeSignal = 4
 )
 
 type EventHeader struct {
@@ -45,6 +46,14 @@ type NetEvent struct {
 	Daddr    [4]byte
 	SaddrV6  [16]byte
 	DaddrV6  [16]byte
+}
+
+type SignalEvent struct {
+	Type uint32
+	Pid  uint32
+	Tpid uint32
+	Sig  int32
+	Comm [16]byte
 }
 
 func (e *ExecEvent) CommString() string {
@@ -88,6 +97,14 @@ func (e *OpenEvent) FilenameString() string {
 }
 
 func (e *NetEvent) CommString() string {
+	idx := bytes.IndexByte(e.Comm[:], 0)
+	if idx < 0 {
+		return string(e.Comm[:])
+	}
+	return string(e.Comm[:idx])
+}
+
+func (e *SignalEvent) CommString() string {
 	idx := bytes.IndexByte(e.Comm[:], 0)
 	if idx < 0 {
 		return string(e.Comm[:])

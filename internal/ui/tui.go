@@ -26,18 +26,19 @@ const (
 	ViewExec
 	ViewOpen
 	ViewNet
+	ViewSignal
 )
 
 type UIModel struct {
-	table      table.Model
-	textInput  textinput.Model
+	table          table.Model
+	textInput      textinput.Model
 	events         []interface{}
 	filteredEvents []interface{}
 	filtering      bool
-	filterText string
-	viewMode   ViewMode
-	width      int
-	height     int
+	filterText     string
+	viewMode       ViewMode
+	width          int
+	height         int
 }
 
 func NewUIModel() *UIModel {
@@ -138,6 +139,14 @@ func (m *UIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.updateTable()
 		return m, nil
 
+	case *event.SignalEvent:
+		m.events = append(m.events, msg)
+		if len(m.events) > 1000 {
+			m.events = m.events[1:]
+		}
+		m.updateTable()
+		return m, nil
+
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "ctrl+c", "q":
@@ -152,11 +161,11 @@ func (m *UIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "tab":
 			if !m.filtering {
-				m.viewMode = (m.viewMode + 1) % 4
+				m.viewMode = (m.viewMode + 1) % 5
 				m.updateTable()
 				return m, nil
 			}
-		case "1", "2", "3", "4":
+		case "1", "2", "3", "4", "5":
 			if !m.filtering {
 				m.viewMode = ViewMode(msg.String()[0] - '1')
 				m.updateTable()
@@ -194,25 +203,39 @@ func (m *UIModel) updateTable() {
 
 		switch e := ev.(type) {
 		case *event.ExecEvent:
-			if m.viewMode != ViewAll && m.viewMode != ViewExec { continue }
+			if m.viewMode != ViewAll && m.viewMode != ViewExec {
+				continue
+			}
 			pidStr = fmt.Sprintf("%d", e.Pid)
 			ppidStr = fmt.Sprintf("%d", e.Ppid)
 			commStr = e.CommString()
 			args = strings.Join(e.ArgvList(), " ")
 		case *event.OpenEvent:
-			if m.viewMode != ViewAll && m.viewMode != ViewOpen { continue }
+			if m.viewMode != ViewAll && m.viewMode != ViewOpen {
+				continue
+			}
 			pidStr = fmt.Sprintf("%d", e.Pid)
 			ppidStr = "-"
 			commStr = e.CommString()
 			args = e.FilenameString()
 		case *event.NetEvent:
-			if m.viewMode != ViewAll && m.viewMode != ViewNet { continue }
+			if m.viewMode != ViewAll && m.viewMode != ViewNet {
+				continue
+			}
 			pidStr = fmt.Sprintf("%d", e.Pid)
 			ppidStr = "-"
 			commStr = e.CommString()
 			saddr := fmt.Sprintf("%d.%d.%d.%d", e.Saddr[0], e.Saddr[1], e.Saddr[2], e.Saddr[3])
 			daddr := fmt.Sprintf("%d.%d.%d.%d", e.Daddr[0], e.Daddr[1], e.Daddr[2], e.Daddr[3])
 			args = fmt.Sprintf("%s:%d -> %s:%d (%s -> %s)", saddr, e.Sport, daddr, e.Dport, e.OldStateString(), e.NewStateString())
+		case *event.SignalEvent:
+			if m.viewMode != ViewAll && m.viewMode != ViewSignal {
+				continue
+			}
+			pidStr = fmt.Sprintf("%d", e.Pid)
+			ppidStr = "-"
+			commStr = e.CommString()
+			args = fmt.Sprintf("sent SIG %d to PID %d", e.Sig, e.Tpid)
 		}
 
 		if m.filterText != "" {
@@ -229,14 +252,14 @@ func (m *UIModel) updateTable() {
 			args,
 		})
 	}
-	
+
 	m.filteredEvents = filtered
 
 	// Remember if we were at the bottom
 	atBottom := m.table.Cursor() == len(m.table.Rows())-1 || m.table.Cursor() == 0
 
 	m.table.SetRows(rows)
-	
+
 	if atBottom {
 		m.table.GotoBottom()
 	}
@@ -251,9 +274,9 @@ func (m *UIModel) View() string {
 
 	// We'll render the table and the footer inside this box.
 	var content strings.Builder
-	
+
 	// Render Tabs
-	tabNames := []string{"1:All", "2:Exec", "3:Open", "4:Net"}
+	tabNames := []string{"1:All", "2:Exec", "3:Open", "4:Net", "5:Signal"}
 	activeTabStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("229")).Background(lipgloss.Color("57")).Padding(0, 1)
 	inactiveTabStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("245")).Padding(0, 1)
 	var renderedTabs []string
@@ -264,14 +287,16 @@ func (m *UIModel) View() string {
 			renderedTabs = append(renderedTabs, inactiveTabStyle.Render(name))
 		}
 	}
-	content.WriteString(lipgloss.JoinHorizontal(lipgloss.Top, renderedTabs...) + "\n\n")
-	
-	content.WriteString(m.table.View() + "\n")
-	
+	content.WriteString(lipgloss.JoinHorizontal(lipgloss.Top, renderedTabs...))
+	content.WriteString("\n\n")
+
+	content.WriteString(m.table.View())
+	content.WriteString("\n")
+
 	detailsStyle := lipgloss.NewStyle().
 		Border(lipgloss.NormalBorder(), true, false, false, false).
 		BorderForeground(lipgloss.Color("240")).
-		Width(m.width - 4).
+		Width(m.width-4).
 		Height(4).
 		Padding(0, 1)
 
@@ -288,17 +313,23 @@ func (m *UIModel) View() string {
 		case *event.NetEvent:
 			detailsText = lipgloss.NewStyle().Foreground(lipgloss.Color("213")).Bold(true).Render("NET") + " " + e.CommString() + "\n\n" +
 				lipgloss.NewStyle().Foreground(lipgloss.Color("252")).Render(e.HumanDescription())
+		case *event.SignalEvent:
+			detailsText = lipgloss.NewStyle().Foreground(lipgloss.Color("202")).Bold(true).Render("SIGNAL") + " " + e.CommString() + "\n\n" +
+				lipgloss.NewStyle().Foreground(lipgloss.Color("252")).Render(fmt.Sprintf("Process %s (PID %d) sent signal %d to target PID %d", e.CommString(), e.Pid, e.Sig, e.Tpid))
 		}
 	} else {
 		detailsText = lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("No event selected")
 	}
 
-	content.WriteString(detailsStyle.Render(detailsText) + "\n")
+	content.WriteString(detailsStyle.Render(detailsText))
+	content.WriteString("\n")
 
 	if m.filtering {
-		content.WriteString(m.textInput.View() + "\n")
+		content.WriteString(m.textInput.View())
+		content.WriteString("\n")
 	} else {
-		content.WriteString(helpStyle.Render(" ↑/k up • ↓/j down • Tab switch mode • / filter • q quit") + "\n")
+		content.WriteString(helpStyle.Render(" ↑/k up • ↓/j down • Tab switch mode • / filter • q quit"))
+		content.WriteString("\n")
 	}
 
 	b.WriteString(boxStyle.Render(content.String()))

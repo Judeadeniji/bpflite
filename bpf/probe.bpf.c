@@ -21,6 +21,7 @@ enum event_type {
     EVENT_EXEC = 1,
     EVENT_OPEN = 2,
     EVENT_NET = 3,
+    EVENT_SIGNAL = 4,
 };
 
 struct exec_event {
@@ -55,8 +56,18 @@ struct net_event {
     u8 daddr_v6[16];
 };
 
+struct signal_event {
+    u32 type; // EVENT_SIGNAL
+    u32 pid;
+    u32 tpid;
+    int sig;
+    char comm[TASK_COMM_LEN];
+};
+
 struct exec_event *unused_exec __attribute__((unused));
 struct open_event *unused_open __attribute__((unused));
+struct net_event *unused_net __attribute__((unused));
+struct signal_event *unused_signal __attribute__((unused));
 struct net_event *unused_net __attribute__((unused));
 
 struct {
@@ -188,6 +199,39 @@ int trace_inet_sock_set_state(struct trace_event_raw_inet_sock_set_state *ctx) {
     *(u64 *)&e->daddr_v6[0] = *(u64 *)&ctx->daddr_v6[0];
     *(u64 *)&e->daddr_v6[8] = *(u64 *)&ctx->daddr_v6[8];
 
+    bpf_ringbuf_submit(e, 0);
+    return 0;
+}
+
+struct kill_args {
+    u64 pad;
+    int __syscall_nr;
+    u32 pad2;
+    pid_t pid;
+    int sig;
+};
+
+SEC("tracepoint/syscalls/sys_enter_kill")
+int trace_sys_kill(struct kill_args *ctx) {
+    u32 pid = bpf_get_current_pid_tgid() >> 32;
+    u32 key = 0;
+    u32 *target_pid = bpf_map_lookup_elem(&target_pid_map, &key);
+    
+    if (target_pid && *target_pid != 0 && *target_pid != pid && *target_pid != ctx->pid) {
+        return 0; // only trace if sender or target matches filter
+    }
+
+    struct signal_event *e;
+    e = bpf_ringbuf_reserve(&events, sizeof(*e), 0);
+    if (!e)
+        return 0;
+
+    e->type = EVENT_SIGNAL;
+    e->pid = pid;
+    e->tpid = ctx->pid;
+    e->sig = ctx->sig;
+    bpf_get_current_comm(&e->comm, sizeof(e->comm));
+    
     bpf_ringbuf_submit(e, 0);
     return 0;
 }
