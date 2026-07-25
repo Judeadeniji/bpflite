@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.0-beta.0](https://github.com/Judeadeniji/bpflite/compare/v0.3.0-beta.0...v0.4.0-beta.0) (2026-07-25)
+
+
+### Features
+
+* add trace all command and tui tabs for easy switching ([#13](https://github.com/Judeadeniji/bpflite/issues/13)) ([777e496](https://github.com/Judeadeniji/bpflite/commit/777e4963eef35849ffcd4eefaabcee2664e93866))
+* implement eBPF signals tracer (kill syscalls) ([#15](https://github.com/Judeadeniji/bpflite/issues/15)) ([f83399d](https://github.com/Judeadeniji/bpflite/commit/f83399d0b04676a6abe6364e924903251559d271))
+
 ## [0.3.0-beta.0](https://github.com/Judeadeniji/bpflite/compare/v0.2.0-beta.0...v0.3.0-beta.0) (2026-07-25)
 
 
