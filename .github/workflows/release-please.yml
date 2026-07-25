@@ -33,8 +33,8 @@ jobs:
         with:
           go-version: '1.22'
           
-      - name: Install LLVM/Clang
-        run: sudo apt-get update && sudo apt-get install -y clang llvm make
+      - name: Install Dependencies
+        run: sudo apt-get update && sudo apt-get install -y clang llvm make libbpf-dev
         
       - name: Generate eBPF
         run: go generate ./...
