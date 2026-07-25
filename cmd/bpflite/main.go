@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -142,7 +143,16 @@ func main() {
 	historyCmd.Flags().IntVarP(&historyLimit, "limit", "l", 50, "Limit the number of events to query")
 	historyCmd.Flags().StringVarP(&historyFormat, "format", "f", "", "Format output using Go text/template (e.g. '{{.Timestamp}} [{{.Type}}] {{.Comm}}')")
 
-	rootCmd.AddCommand(traceCmd, recordCmd, stopCmd, historyCmd)
+	dumpCmd := &cobra.Command{
+		Use:   "dump",
+		Short: "Dump the entire SQLite database history to JSON lines",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			jsonOutput = true
+			return runHistory(-1, "")
+		},
+	}
+
+	rootCmd.AddCommand(traceCmd, recordCmd, stopCmd, historyCmd, dumpCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -220,10 +230,21 @@ func runHistory(limit int, formatStr string) error {
 	}
 
 	if len(events) == 0 {
-		fmt.Println("No events found in history.")
+		if !jsonOutput {
+			fmt.Println("No events found in history.")
+		}
 		return nil
 	}
-
+	
+	if jsonOutput {
+		for i := len(events) - 1; i >= 0; i-- {
+			e := events[i]
+			b, _ := json.Marshal(e)
+			fmt.Println(string(b))
+		}
+		return nil
+	}
+	
 	if formatStr != "" {
 		tmpl, err := template.New("history").Parse(formatStr)
 		if err != nil {
