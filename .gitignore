@@ -1,6 +1,5 @@
 bin/
 /bpflite
-bpf/vmlinux.h
 *.swp
 .vscode/
 data/
