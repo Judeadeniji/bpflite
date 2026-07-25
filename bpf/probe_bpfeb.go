@@ -16,12 +16,14 @@ import (
 //
 // Used for safe lookups in a Collection or CollectionSpec.
 const (
-	ProbeMapEvents          = "events"
-	ProbeMapTargetPidMap    = "target_pid_map"
-	ProbeProgTraceSysExecve = "trace_sys_execve"
-	ProbeProgTraceSysOpenat = "trace_sys_openat"
-	ProbeVarUnusedExec      = "unused_exec"
-	ProbeVarUnusedOpen      = "unused_open"
+	ProbeMapEvents                 = "events"
+	ProbeMapTargetPidMap           = "target_pid_map"
+	ProbeProgTraceInetSockSetState = "trace_inet_sock_set_state"
+	ProbeProgTraceSysExecve        = "trace_sys_execve"
+	ProbeProgTraceSysOpenat        = "trace_sys_openat"
+	ProbeVarUnusedExec             = "unused_exec"
+	ProbeVarUnusedNet              = "unused_net"
+	ProbeVarUnusedOpen             = "unused_open"
 )
 
 // LoadProbe returns the embedded CollectionSpec for Probe.
@@ -66,8 +68,9 @@ type ProbeSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type ProbeProgramSpecs struct {
-	TraceSysExecve *ebpf.ProgramSpec `ebpf:"trace_sys_execve"`
-	TraceSysOpenat *ebpf.ProgramSpec `ebpf:"trace_sys_openat"`
+	TraceInetSockSetState *ebpf.ProgramSpec `ebpf:"trace_inet_sock_set_state"`
+	TraceSysExecve        *ebpf.ProgramSpec `ebpf:"trace_sys_execve"`
+	TraceSysOpenat        *ebpf.ProgramSpec `ebpf:"trace_sys_openat"`
 }
 
 // ProbeMapSpecs contains maps before they are loaded into the kernel.
@@ -83,6 +86,7 @@ type ProbeMapSpecs struct {
 // It can be passed ebpf.CollectionSpec.Assign.
 type ProbeVariableSpecs struct {
 	UnusedExec *ebpf.VariableSpec `ebpf:"unused_exec"`
+	UnusedNet  *ebpf.VariableSpec `ebpf:"unused_net"`
 	UnusedOpen *ebpf.VariableSpec `ebpf:"unused_open"`
 }
 
@@ -122,6 +126,7 @@ func (m *ProbeMaps) Close() error {
 // It can be passed to LoadProbeObjects or ebpf.CollectionSpec.LoadAndAssign.
 type ProbeVariables struct {
 	UnusedExec *ebpf.Variable `ebpf:"unused_exec"`
+	UnusedNet  *ebpf.Variable `ebpf:"unused_net"`
 	UnusedOpen *ebpf.Variable `ebpf:"unused_open"`
 }
 
@@ -129,12 +134,14 @@ type ProbeVariables struct {
 //
 // It can be passed to LoadProbeObjects or ebpf.CollectionSpec.LoadAndAssign.
 type ProbePrograms struct {
-	TraceSysExecve *ebpf.Program `ebpf:"trace_sys_execve"`
-	TraceSysOpenat *ebpf.Program `ebpf:"trace_sys_openat"`
+	TraceInetSockSetState *ebpf.Program `ebpf:"trace_inet_sock_set_state"`
+	TraceSysExecve        *ebpf.Program `ebpf:"trace_sys_execve"`
+	TraceSysOpenat        *ebpf.Program `ebpf:"trace_sys_openat"`
 }
 
 func (p *ProbePrograms) Close() error {
 	return _ProbeClose(
+		p.TraceInetSockSetState,
 		p.TraceSysExecve,
 		p.TraceSysOpenat,
 	)

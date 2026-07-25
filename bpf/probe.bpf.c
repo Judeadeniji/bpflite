@@ -20,6 +20,7 @@ char __license[] SEC("license") = "Dual MIT/GPL";
 enum event_type {
     EVENT_EXEC = 1,
     EVENT_OPEN = 2,
+    EVENT_NET = 3,
 };
 
 struct exec_event {
@@ -38,8 +39,25 @@ struct open_event {
     char filename[MAX_FILENAME_LEN];
 };
 
+struct net_event {
+    u32 type; // EVENT_NET
+    u32 pid;
+    char comm[TASK_COMM_LEN];
+    u16 family;
+    u16 protocol;
+    u16 sport;
+    u16 dport;
+    int oldstate;
+    int newstate;
+    u8 saddr[4];
+    u8 daddr[4];
+    u8 saddr_v6[16];
+    u8 daddr_v6[16];
+};
+
 struct exec_event *unused_exec __attribute__((unused));
 struct open_event *unused_open __attribute__((unused));
+struct net_event *unused_net __attribute__((unused));
 
 struct {
     __uint(type, BPF_MAP_TYPE_RINGBUF);
@@ -129,6 +147,46 @@ int trace_sys_openat(struct openat_args *ctx) {
     bpf_get_current_comm(&e->comm, sizeof(e->comm));
     
     bpf_probe_read_user_str(&e->filename, sizeof(e->filename), ctx->filename);
+
+    bpf_ringbuf_submit(e, 0);
+    return 0;
+}
+
+
+SEC("tracepoint/sock/inet_sock_set_state")
+int trace_inet_sock_set_state(struct trace_event_raw_inet_sock_set_state *ctx) {
+    u32 pid = bpf_get_current_pid_tgid() >> 32;
+    u32 key = 0;
+    u32 *target_pid = bpf_map_lookup_elem(&target_pid_map, &key);
+    
+    if (target_pid && *target_pid != 0 && *target_pid != pid) {
+        return 0;
+    }
+
+    struct net_event *e;
+    e = bpf_ringbuf_reserve(&events, sizeof(*e), 0);
+    if (!e)
+        return 0;
+
+    e->type = EVENT_NET;
+    e->pid = pid;
+    bpf_get_current_comm(&e->comm, sizeof(e->comm));
+    
+    e->family = ctx->family;
+    e->protocol = ctx->protocol;
+    e->sport = ctx->sport;
+    e->dport = ctx->dport;
+    e->oldstate = ctx->oldstate;
+    e->newstate = ctx->newstate;
+    
+    // actually, let's use direct pointer casting to force Clang to emit scalar loads
+    *(u32 *)e->saddr = *(u32 *)ctx->saddr;
+    *(u32 *)e->daddr = *(u32 *)ctx->daddr;
+    
+    *(u64 *)&e->saddr_v6[0] = *(u64 *)&ctx->saddr_v6[0];
+    *(u64 *)&e->saddr_v6[8] = *(u64 *)&ctx->saddr_v6[8];
+    *(u64 *)&e->daddr_v6[0] = *(u64 *)&ctx->daddr_v6[0];
+    *(u64 *)&e->daddr_v6[8] = *(u64 *)&ctx->daddr_v6[8];
 
     bpf_ringbuf_submit(e, 0);
     return 0;
