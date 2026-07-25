@@ -22,8 +22,9 @@ var (
 type UIModel struct {
 	table      table.Model
 	textInput  textinput.Model
-	events     []interface{}
-	filtering  bool
+	events         []interface{}
+	filteredEvents []interface{}
+	filtering      bool
 	filterText string
 	width      int
 	height     int
@@ -62,9 +63,10 @@ func NewUIModel() *UIModel {
 	ti.Width = 30
 
 	return &UIModel{
-		table:     t,
-		textInput: ti,
-		events:    make([]interface{}, 0),
+		table:          t,
+		textInput:      ti,
+		events:         make([]interface{}, 0),
+		filteredEvents: make([]interface{}, 0),
 	}
 }
 
@@ -81,7 +83,7 @@ func (m *UIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 
-		h := msg.Height - 6
+		h := msg.Height - 13
 		if h < 5 {
 			h = 5
 		}
@@ -110,6 +112,14 @@ func (m *UIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case *event.OpenEvent:
+		m.events = append(m.events, msg)
+		if len(m.events) > 1000 {
+			m.events = m.events[1:]
+		}
+		m.updateTable()
+		return m, nil
+
+	case *event.NetEvent:
 		m.events = append(m.events, msg)
 		if len(m.events) > 1000 {
 			m.events = m.events[1:]
@@ -155,6 +165,7 @@ func (m *UIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *UIModel) updateTable() {
 	var rows []table.Row
+	var filtered []interface{}
 	for _, ev := range m.events {
 		var pidStr, ppidStr, commStr, args string
 
@@ -169,6 +180,13 @@ func (m *UIModel) updateTable() {
 			ppidStr = "-"
 			commStr = e.CommString()
 			args = e.FilenameString()
+		case *event.NetEvent:
+			pidStr = fmt.Sprintf("%d", e.Pid)
+			ppidStr = "-"
+			commStr = e.CommString()
+			saddr := fmt.Sprintf("%d.%d.%d.%d", e.Saddr[0], e.Saddr[1], e.Saddr[2], e.Saddr[3])
+			daddr := fmt.Sprintf("%d.%d.%d.%d", e.Daddr[0], e.Daddr[1], e.Daddr[2], e.Daddr[3])
+			args = fmt.Sprintf("%s:%d -> %s:%d (%s -> %s)", saddr, e.Sport, daddr, e.Dport, e.OldStateString(), e.NewStateString())
 		}
 
 		if m.filterText != "" {
@@ -177,6 +195,7 @@ func (m *UIModel) updateTable() {
 			}
 		}
 
+		filtered = append(filtered, ev)
 		rows = append(rows, table.Row{
 			pidStr,
 			ppidStr,
@@ -185,10 +204,16 @@ func (m *UIModel) updateTable() {
 		})
 	}
 	
-	// Keep selection at bottom or current relative pos? Table usually resets if rows change completely.
-	// For simplicity, just set rows.
+	m.filteredEvents = filtered
+
+	// Remember if we were at the bottom
+	atBottom := m.table.Cursor() == len(m.table.Rows())-1 || m.table.Cursor() == 0
+
 	m.table.SetRows(rows)
-	m.table.GotoBottom()
+	
+	if atBottom {
+		m.table.GotoBottom()
+	}
 }
 
 func (m *UIModel) View() string {
@@ -202,6 +227,33 @@ func (m *UIModel) View() string {
 	var content strings.Builder
 	content.WriteString(m.table.View() + "\n")
 	
+	detailsStyle := lipgloss.NewStyle().
+		Border(lipgloss.NormalBorder(), true, false, false, false).
+		BorderForeground(lipgloss.Color("240")).
+		Width(m.width - 4).
+		Height(4).
+		Padding(0, 1)
+
+	var detailsText string
+	if len(m.filteredEvents) > 0 && m.table.Cursor() >= 0 && m.table.Cursor() < len(m.filteredEvents) {
+		ev := m.filteredEvents[m.table.Cursor()]
+		switch e := ev.(type) {
+		case *event.ExecEvent:
+			detailsText = lipgloss.NewStyle().Foreground(lipgloss.Color("81")).Bold(true).Render("EXEC") + " " + e.CommString() + "\n\n" +
+				lipgloss.NewStyle().Foreground(lipgloss.Color("252")).Render(strings.Join(e.ArgvList(), " "))
+		case *event.OpenEvent:
+			detailsText = lipgloss.NewStyle().Foreground(lipgloss.Color("119")).Bold(true).Render("OPEN") + " " + e.CommString() + "\n\n" +
+				lipgloss.NewStyle().Foreground(lipgloss.Color("252")).Render(e.FilenameString())
+		case *event.NetEvent:
+			detailsText = lipgloss.NewStyle().Foreground(lipgloss.Color("213")).Bold(true).Render("NET") + " " + e.CommString() + "\n\n" +
+				lipgloss.NewStyle().Foreground(lipgloss.Color("252")).Render(e.HumanDescription())
+		}
+	} else {
+		detailsText = lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("No event selected")
+	}
+
+	content.WriteString(detailsStyle.Render(detailsText) + "\n")
+
 	if m.filtering {
 		content.WriteString(m.textInput.View() + "\n")
 	} else {

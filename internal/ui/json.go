@@ -16,6 +16,15 @@ type JSONOutput struct {
 	Comm     string   `json:"comm"`
 	Args     []string `json:"args,omitempty"`
 	Filename string   `json:"filename,omitempty"`
+	Family   uint16   `json:"family,omitempty"`
+	Protocol    uint16   `json:"protocol,omitempty"`
+	Sport       uint16   `json:"sport,omitempty"`
+	Dport       uint16   `json:"dport,omitempty"`
+	Oldstate    string   `json:"oldstate,omitempty"`
+	Newstate    string   `json:"newstate,omitempty"`
+	Saddr       string   `json:"saddr,omitempty"`
+	Daddr       string   `json:"daddr,omitempty"`
+	Description string   `json:"description,omitempty"`
 }
 
 func PrintJSON(e interface{}) {
@@ -37,6 +46,21 @@ func PrintJSON(e interface{}) {
 			Pid:      ev.Pid,
 			Comm:     ev.CommString(),
 			Filename: ev.FilenameString(),
+		}
+	case *event.NetEvent:
+		out = JSONOutput{
+			Type:        "net",
+			Pid:         ev.Pid,
+			Comm:        ev.CommString(),
+			Family:      ev.Family,
+			Protocol:    ev.Protocol,
+			Sport:       ev.Sport,
+			Dport:       ev.Dport,
+			Oldstate:    ev.OldStateString(),
+			Newstate:    ev.NewStateString(),
+			Saddr:       fmt.Sprintf("%d.%d.%d.%d", ev.Saddr[0], ev.Saddr[1], ev.Saddr[2], ev.Saddr[3]),
+			Daddr:       fmt.Sprintf("%d.%d.%d.%d", ev.Daddr[0], ev.Daddr[1], ev.Daddr[2], ev.Daddr[3]),
+			Description: ev.HumanDescription(),
 		}
 	default:
 		return
