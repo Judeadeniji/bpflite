@@ -7,8 +7,9 @@
 
 It features a live, streaming Bubble Tea TUI, an invisible background daemon for historical SQLite logging, and a highly scriptable JSON output mode.
 
-## Features
+![bpflite demo](./demo.gif)
 
+## Features
 - **`execve` tracing:** Monitor all new processes spawning across the system, including full arguments.
 - **`openat` tracing:** Monitor files being opened, optionally filtered to a specific PID.
 - **TCP Network tracing:** Observe TCP connection lifecycles across the system (connect, accept, close) using the `inet_sock_set_state` tracepoint.

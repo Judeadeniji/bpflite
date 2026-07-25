@@ -8,7 +8,7 @@ Set Height 600
 Set Theme "Catppuccin Mocha"
 
 # Start the tool
-Type "bin/bpflite trace exec"
+Type "bin/bpflite trace net"
 Enter
 Sleep 5s
 
