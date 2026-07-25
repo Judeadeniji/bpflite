@@ -71,7 +71,16 @@ func main() {
 
 	rootCmd.PersistentFlags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
 
-	traceCmd.AddCommand(execCmd, openCmd, netCmd)
+	allCmd := &cobra.Command{
+		Use:   "all",
+		Short: "Trace all events (exec, open, net) simultaneously",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runTracer(true, true, true, pidFilter)
+		},
+	}
+	allCmd.Flags().Uint32Var(&pidFilter, "pid", 0, "Filter events by PID")
+
+	traceCmd.AddCommand(execCmd, openCmd, netCmd, allCmd)
 
 	recordCmd := &cobra.Command{
 		Use:   "record",
