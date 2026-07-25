@@ -2,8 +2,8 @@ name: Release
 
 on:
   push:
-    branches:
-      - main
+    tags:
+      - "v*"
 
 jobs:
   release:
@@ -25,17 +25,15 @@ jobs:
       run: go generate ./...
 
     - name: Build Linux AMD64
-      run: GOOS=linux GOARCH=amd64 go build -ldflags "-s -w -X main.version=${GITHUB_SHA::7}" -o bpflite-linux-amd64 ./cmd/bpflite
+      run: GOOS=linux GOARCH=amd64 go build -ldflags "-s -w -X main.version=${GITHUB_REF_NAME}" -o bpflite-linux-amd64 ./cmd/bpflite
 
     - name: Build Linux ARM64
-      run: GOOS=linux GOARCH=arm64 go build -ldflags "-s -w -X main.version=${GITHUB_SHA::7}" -o bpflite-linux-arm64 ./cmd/bpflite
+      run: GOOS=linux GOARCH=arm64 go build -ldflags "-s -w -X main.version=${GITHUB_REF_NAME}" -o bpflite-linux-arm64 ./cmd/bpflite
 
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v1
       with:
-        tag_name: latest
-        name: "Rolling Release (latest)"
         files: |
           bpflite-linux-amd64
           bpflite-linux-arm64
-        generate_release_notes: false
+        generate_release_notes: true
