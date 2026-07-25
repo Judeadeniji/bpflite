@@ -9,12 +9,15 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"text/template"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"bpflite/internal/db"
 	"bpflite/internal/event"
 	"bpflite/internal/loader"
 	"bpflite/internal/ui"
+
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/cilium/ebpf/ringbuf"
 	"github.com/spf13/cobra"
 )
@@ -79,17 +82,17 @@ func main() {
 				if err != nil {
 					return err
 				}
-				
+
 				execArgs := []string{"record"}
 				c := exec.Command(os.Args[0], execArgs...)
 				c.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 				c.Stdout = logFile
 				c.Stderr = logFile
-				
+
 				if err := c.Start(); err != nil {
 					return err
 				}
-				
+
 				fmt.Printf("bpflite daemon started in background (PID %d)\n", c.Process.Pid)
 				fmt.Println("Logs: data/bpflite.log")
 				fmt.Println("DB: data/bpflite.sqlite")
@@ -112,7 +115,7 @@ func main() {
 			pidStr := strings.TrimSpace(string(b))
 			var pid int
 			fmt.Sscanf(pidStr, "%d", &pid)
-			
+
 			process, err := os.FindProcess(pid)
 			if err != nil {
 				return err
@@ -120,20 +123,24 @@ func main() {
 			if err := process.Signal(syscall.SIGTERM); err != nil {
 				return fmt.Errorf("failed to stop daemon: %w", err)
 			}
-			
+
 			fmt.Println("Daemon stopped.")
 			os.Remove("data/bpflite.pid")
 			return nil
 		},
 	}
 
+	var historyLimit int
+	var historyFormat string
 	historyCmd := &cobra.Command{
 		Use:   "history",
 		Short: "Query historical events from SQLite database",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runHistory()
+			return runHistory(historyLimit, historyFormat)
 		},
 	}
+	historyCmd.Flags().IntVarP(&historyLimit, "limit", "l", 50, "Limit the number of events to query")
+	historyCmd.Flags().StringVarP(&historyFormat, "format", "f", "", "Format output using Go text/template (e.g. '{{.Timestamp}} [{{.Type}}] {{.Comm}}')")
 
 	rootCmd.AddCommand(traceCmd, recordCmd, stopCmd, historyCmd)
 
@@ -145,9 +152,9 @@ func main() {
 
 func runDaemon() error {
 	os.MkdirAll("data", 0755)
-	
+
 	pidFile := "data/bpflite.pid"
-	os.WriteFile(pidFile, []byte(fmt.Sprintf("%d\n", os.Getpid())), 0644)
+	os.WriteFile(pidFile, fmt.Appendf(nil, "%d\n", os.Getpid()), 0644)
 	defer os.Remove(pidFile)
 
 	l, err := loader.New(true, true, true, 0)
@@ -200,8 +207,77 @@ func runDaemon() error {
 	}
 }
 
-func runHistory() error {
-	fmt.Println("History feature coming soon (query data/bpflite.sqlite using standard sqlite3 tools for now).")
+func runHistory(limit int, formatStr string) error {
+	database, err := db.New("data/bpflite.sqlite")
+	if err != nil {
+		return fmt.Errorf("failed to open database: %w", err)
+	}
+	defer database.Close()
+
+	events, err := database.QueryHistory(limit)
+	if err != nil {
+		return fmt.Errorf("query history failed: %w", err)
+	}
+
+	if len(events) == 0 {
+		fmt.Println("No events found in history.")
+		return nil
+	}
+
+	if formatStr != "" {
+		tmpl, err := template.New("history").Parse(formatStr)
+		if err != nil {
+			return fmt.Errorf("invalid template format: %w", err)
+		}
+		for i := len(events) - 1; i >= 0; i-- {
+			e := events[i]
+			var buf strings.Builder
+			if err := tmpl.Execute(&buf, e); err != nil {
+				return err
+			}
+			fmt.Println(buf.String())
+		}
+		return nil
+	}
+
+	headerStyle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("240"))
+	timeStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
+	execStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("81")).Bold(true)
+	openStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("119")).Bold(true)
+	netStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("213")).Bold(true)
+	pidStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	commStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
+
+	fmt.Println(headerStyle.Render(fmt.Sprintf("%-20s %-6s %-7s %-16s %s", "TIMESTAMP", "TYPE", "PID", "COMM", "DETAILS")))
+
+	// Print in chronological order (oldest first among the limit)
+	for i := len(events) - 1; i >= 0; i-- {
+		e := events[i]
+
+		typeStr := strings.ToUpper(e.Type)
+		switch e.Type {
+		case "exec":
+			typeStr = execStyle.Render(fmt.Sprintf("%-6s", typeStr))
+		case "open":
+			typeStr = openStyle.Render(fmt.Sprintf("%-6s", typeStr))
+		case "net":
+			typeStr = netStyle.Render(fmt.Sprintf("%-6s", typeStr))
+		default:
+			typeStr = fmt.Sprintf("%-6s", typeStr)
+		}
+
+		timeStr := timeStyle.Render(fmt.Sprintf("%-20s", e.Timestamp))
+		pidStr := pidStyle.Render(fmt.Sprintf("%-7d", e.Pid))
+
+		// Truncate comm if too long
+		comm := e.Comm
+		if len(comm) > 15 {
+			comm = comm[:14] + "…"
+		}
+		cStr := commStyle.Render(fmt.Sprintf("%-16s", comm))
+
+		fmt.Printf("%s %s %s %s %s\n", timeStr, typeStr, pidStr, cStr, e.Details)
+	}
 	return nil
 }
 

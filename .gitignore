@@ -3,3 +3,4 @@ bin/
 bpf/vmlinux.h
 *.swp
 .vscode/
+data/

@@ -114,3 +114,38 @@ func (d *DB) InsertNet(e *event.NetEvent) error {
 func (d *DB) Close() error {
 	return d.db.Close()
 }
+
+type HistoryEvent struct {
+	Type      string
+	Timestamp string
+	Pid       int
+	Comm      string
+	Details   string
+}
+
+func (d *DB) QueryHistory(limit int) ([]HistoryEvent, error) {
+	query := `
+	SELECT 'exec' as type, timestamp, pid, comm, args as details FROM exec_events
+	UNION ALL
+	SELECT 'open' as type, timestamp, pid, comm, filename as details FROM open_events
+	UNION ALL
+	SELECT 'net' as type, timestamp, pid, comm, saddr || ':' || sport || ' -> ' || daddr || ':' || dport || ' (' || old_state || ' -> ' || new_state || ')' as details FROM net_events
+	ORDER BY timestamp DESC
+	LIMIT ?
+	`
+	rows, err := d.db.Query(query, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var events []HistoryEvent
+	for rows.Next() {
+		var e HistoryEvent
+		if err := rows.Scan(&e.Type, &e.Timestamp, &e.Pid, &e.Comm, &e.Details); err != nil {
+			return nil, err
+		}
+		events = append(events, e)
+	}
+	return events, rows.Err()
+}
