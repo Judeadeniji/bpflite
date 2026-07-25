@@ -46,7 +46,7 @@ func main() {
 		Use:   "exec",
 		Short: "Trace execve syscalls",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runTracer(true, false, false, 0)
+			return runTracer(true, false, false, false, 0)
 		},
 	}
 
@@ -54,7 +54,7 @@ func main() {
 		Use:   "open",
 		Short: "Trace openat syscalls",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runTracer(false, true, false, pidFilter)
+			return runTracer(false, true, false, false, pidFilter)
 		},
 	}
 
@@ -62,25 +62,34 @@ func main() {
 		Use:   "net",
 		Short: "Trace TCP connection lifecycle",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runTracer(false, false, true, pidFilter)
+			return runTracer(false, false, true, false, pidFilter)
+		},
+	}
+
+	signalCmd := &cobra.Command{
+		Use:   "signal",
+		Short: "Trace kill syscalls (signals)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runTracer(false, false, false, true, pidFilter)
 		},
 	}
 
 	openCmd.Flags().Uint32Var(&pidFilter, "pid", 0, "Filter events by PID")
 	netCmd.Flags().Uint32Var(&pidFilter, "pid", 0, "Filter events by PID")
+	signalCmd.Flags().Uint32Var(&pidFilter, "pid", 0, "Filter events by PID")
 
 	rootCmd.PersistentFlags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
 
 	allCmd := &cobra.Command{
 		Use:   "all",
-		Short: "Trace all events (exec, open, net) simultaneously",
+		Short: "Trace all events (exec, open, net, signal) simultaneously",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runTracer(true, true, true, pidFilter)
+			return runTracer(true, true, true, true, pidFilter)
 		},
 	}
 	allCmd.Flags().Uint32Var(&pidFilter, "pid", 0, "Filter events by PID")
 
-	traceCmd.AddCommand(execCmd, openCmd, netCmd, allCmd)
+	traceCmd.AddCommand(execCmd, openCmd, netCmd, signalCmd, allCmd)
 
 	recordCmd := &cobra.Command{
 		Use:   "record",
@@ -176,7 +185,7 @@ func runDaemon() error {
 	os.WriteFile(pidFile, fmt.Appendf(nil, "%d\n", os.Getpid()), 0644)
 	defer os.Remove(pidFile)
 
-	l, err := loader.New(true, true, true, 0)
+	l, err := loader.New(true, true, true, true, 0)
 	if err != nil {
 		return fmt.Errorf("failed to initialize loader: %w", err)
 	}
@@ -221,6 +230,8 @@ func runDaemon() error {
 				database.InsertOpen(ev)
 			case *event.NetEvent:
 				database.InsertNet(ev)
+			case *event.SignalEvent:
+				database.InsertSignal(ev)
 			}
 		}
 	}
@@ -275,6 +286,7 @@ func runHistory(limit int, formatStr string) error {
 	execStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("81")).Bold(true)
 	openStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("119")).Bold(true)
 	netStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("213")).Bold(true)
+	signalStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("202")).Bold(true)
 	pidStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 	commStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
 
@@ -292,6 +304,8 @@ func runHistory(limit int, formatStr string) error {
 			typeStr = openStyle.Render(fmt.Sprintf("%-6s", typeStr))
 		case "net":
 			typeStr = netStyle.Render(fmt.Sprintf("%-6s", typeStr))
+		case "signal":
+			typeStr = signalStyle.Render(fmt.Sprintf("%-6s", typeStr))
 		default:
 			typeStr = fmt.Sprintf("%-6s", typeStr)
 		}
@@ -311,8 +325,8 @@ func runHistory(limit int, formatStr string) error {
 	return nil
 }
 
-func runTracer(traceExec, traceOpen, traceNet bool, filterPID uint32) error {
-	l, err := loader.New(traceExec, traceOpen, traceNet, filterPID)
+func runTracer(traceExec, traceOpen, traceNet, traceSignal bool, filterPID uint32) error {
+	l, err := loader.New(traceExec, traceOpen, traceNet, traceSignal, filterPID)
 	if err != nil {
 		return fmt.Errorf("failed to initialize loader: %w", err)
 	}

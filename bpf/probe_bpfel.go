@@ -20,10 +20,12 @@ const (
 	ProbeMapTargetPidMap           = "target_pid_map"
 	ProbeProgTraceInetSockSetState = "trace_inet_sock_set_state"
 	ProbeProgTraceSysExecve        = "trace_sys_execve"
+	ProbeProgTraceSysKill          = "trace_sys_kill"
 	ProbeProgTraceSysOpenat        = "trace_sys_openat"
 	ProbeVarUnusedExec             = "unused_exec"
 	ProbeVarUnusedNet              = "unused_net"
 	ProbeVarUnusedOpen             = "unused_open"
+	ProbeVarUnusedSignal           = "unused_signal"
 )
 
 // LoadProbe returns the embedded CollectionSpec for Probe.
@@ -70,6 +72,7 @@ type ProbeSpecs struct {
 type ProbeProgramSpecs struct {
 	TraceInetSockSetState *ebpf.ProgramSpec `ebpf:"trace_inet_sock_set_state"`
 	TraceSysExecve        *ebpf.ProgramSpec `ebpf:"trace_sys_execve"`
+	TraceSysKill          *ebpf.ProgramSpec `ebpf:"trace_sys_kill"`
 	TraceSysOpenat        *ebpf.ProgramSpec `ebpf:"trace_sys_openat"`
 }
 
@@ -85,9 +88,10 @@ type ProbeMapSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type ProbeVariableSpecs struct {
-	UnusedExec *ebpf.VariableSpec `ebpf:"unused_exec"`
-	UnusedNet  *ebpf.VariableSpec `ebpf:"unused_net"`
-	UnusedOpen *ebpf.VariableSpec `ebpf:"unused_open"`
+	UnusedExec   *ebpf.VariableSpec `ebpf:"unused_exec"`
+	UnusedNet    *ebpf.VariableSpec `ebpf:"unused_net"`
+	UnusedOpen   *ebpf.VariableSpec `ebpf:"unused_open"`
+	UnusedSignal *ebpf.VariableSpec `ebpf:"unused_signal"`
 }
 
 // ProbeObjects contains all objects after they have been loaded into the kernel.
@@ -125,9 +129,10 @@ func (m *ProbeMaps) Close() error {
 //
 // It can be passed to LoadProbeObjects or ebpf.CollectionSpec.LoadAndAssign.
 type ProbeVariables struct {
-	UnusedExec *ebpf.Variable `ebpf:"unused_exec"`
-	UnusedNet  *ebpf.Variable `ebpf:"unused_net"`
-	UnusedOpen *ebpf.Variable `ebpf:"unused_open"`
+	UnusedExec   *ebpf.Variable `ebpf:"unused_exec"`
+	UnusedNet    *ebpf.Variable `ebpf:"unused_net"`
+	UnusedOpen   *ebpf.Variable `ebpf:"unused_open"`
+	UnusedSignal *ebpf.Variable `ebpf:"unused_signal"`
 }
 
 // ProbePrograms contains all programs after they have been loaded into the kernel.
@@ -136,6 +141,7 @@ type ProbeVariables struct {
 type ProbePrograms struct {
 	TraceInetSockSetState *ebpf.Program `ebpf:"trace_inet_sock_set_state"`
 	TraceSysExecve        *ebpf.Program `ebpf:"trace_sys_execve"`
+	TraceSysKill          *ebpf.Program `ebpf:"trace_sys_kill"`
 	TraceSysOpenat        *ebpf.Program `ebpf:"trace_sys_openat"`
 }
 
@@ -143,6 +149,7 @@ func (p *ProbePrograms) Close() error {
 	return _ProbeClose(
 		p.TraceInetSockSetState,
 		p.TraceSysExecve,
+		p.TraceSysKill,
 		p.TraceSysOpenat,
 	)
 }

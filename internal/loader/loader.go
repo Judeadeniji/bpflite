@@ -20,7 +20,7 @@ type Loader struct {
 	reader *ringbuf.Reader
 }
 
-func New(traceExec bool, traceOpen bool, traceNet bool, filterPID uint32) (*Loader, error) {
+func New(traceExec bool, traceOpen bool, traceNet bool, traceSignal bool, filterPID uint32) (*Loader, error) {
 	if err := rlimit.RemoveMemlock(); err != nil {
 		return nil, fmt.Errorf("remove memlock: %w", err)
 	}
@@ -69,6 +69,18 @@ func New(traceExec bool, traceOpen bool, traceNet bool, filterPID uint32) (*Load
 			}
 			objs.Close()
 			return nil, fmt.Errorf("attach inet_sock_set_state tracepoint: %w", err)
+		}
+		links = append(links, tp)
+	}
+
+	if traceSignal {
+		tp, err := link.Tracepoint("syscalls", "sys_enter_kill", objs.TraceSysKill, nil)
+		if err != nil {
+			for _, ln := range links {
+				ln.Close()
+			}
+			objs.Close()
+			return nil, fmt.Errorf("attach sys_enter_kill tracepoint: %w", err)
 		}
 		links = append(links, tp)
 	}
@@ -141,6 +153,12 @@ func (l *Loader) ReadEvent() (interface{}, error) {
 		var e event.NetEvent
 		if err := binary.Read(bytes.NewReader(record.RawSample), binary.LittleEndian, &e); err != nil {
 			return nil, fmt.Errorf("decode net event: %w", err)
+		}
+		return &e, nil
+	case event.TypeSignal:
+		var e event.SignalEvent
+		if err := binary.Read(bytes.NewReader(record.RawSample), binary.LittleEndian, &e); err != nil {
+			return nil, fmt.Errorf("decode signal event: %w", err)
 		}
 		return &e, nil
 	default:

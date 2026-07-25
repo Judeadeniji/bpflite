@@ -70,6 +70,15 @@ func (d *DB) initSchema() error {
 		old_state TEXT,
 		new_state TEXT
 	);
+
+	CREATE TABLE IF NOT EXISTS signal_events (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+		pid INTEGER,
+		tpid INTEGER,
+		sig INTEGER,
+		comm TEXT
+	);
 	`
 	_, err := d.db.Exec(schema)
 	return err
@@ -111,6 +120,14 @@ func (d *DB) InsertNet(e *event.NetEvent) error {
 	return err
 }
 
+func (d *DB) InsertSignal(e *event.SignalEvent) error {
+	_, err := d.db.Exec(
+		"INSERT INTO signal_events (pid, tpid, sig, comm) VALUES (?, ?, ?, ?)",
+		e.Pid, e.Tpid, e.Sig, e.CommString(),
+	)
+	return err
+}
+
 func (d *DB) Close() error {
 	return d.db.Close()
 }
@@ -130,6 +147,8 @@ func (d *DB) QueryHistory(limit int) ([]HistoryEvent, error) {
 	SELECT 'open' as type, timestamp, pid, comm, filename as details FROM open_events
 	UNION ALL
 	SELECT 'net' as type, timestamp, pid, comm, saddr || ':' || sport || ' -> ' || daddr || ':' || dport || ' (' || old_state || ' -> ' || new_state || ')' as details FROM net_events
+	UNION ALL
+	SELECT 'signal' as type, timestamp, pid, comm, 'sent SIG ' || sig || ' to PID ' || tpid as details FROM signal_events
 	ORDER BY timestamp DESC
 	LIMIT ?
 	`
