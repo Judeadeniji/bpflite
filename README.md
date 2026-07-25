@@ -76,7 +76,7 @@ sudo bin/bpflite stop
 ### Running without `sudo`
 You can grant the compiled binary the necessary Linux capabilities so it doesn't require full root privileges to attach eBPF probes:
 ```bash
-sudo setcap cap_bpf,cap_perfmon+ep bin/bpflite
+sudo setcap cap_bpf,cap_perfmon,cap_sys_resource,cap_dac_read_search+ep bin/bpflite
 bin/bpflite trace exec
 ```
 
