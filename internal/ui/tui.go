@@ -19,6 +19,15 @@ var (
 	helpStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
 )
 
+type ViewMode int
+
+const (
+	ViewAll ViewMode = iota
+	ViewExec
+	ViewOpen
+	ViewNet
+)
+
 type UIModel struct {
 	table      table.Model
 	textInput  textinput.Model
@@ -26,6 +35,7 @@ type UIModel struct {
 	filteredEvents []interface{}
 	filtering      bool
 	filterText string
+	viewMode   ViewMode
 	width      int
 	height     int
 }
@@ -67,6 +77,7 @@ func NewUIModel() *UIModel {
 		textInput:      ti,
 		events:         make([]interface{}, 0),
 		filteredEvents: make([]interface{}, 0),
+		viewMode:       ViewAll,
 	}
 }
 
@@ -139,6 +150,18 @@ func (m *UIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.textInput.Focus()
 				return m, textinput.Blink
 			}
+		case "tab":
+			if !m.filtering {
+				m.viewMode = (m.viewMode + 1) % 4
+				m.updateTable()
+				return m, nil
+			}
+		case "1", "2", "3", "4":
+			if !m.filtering {
+				m.viewMode = ViewMode(msg.String()[0] - '1')
+				m.updateTable()
+				return m, nil
+			}
 		case "enter", "esc":
 			if m.filtering {
 				m.filtering = false
@@ -171,16 +194,19 @@ func (m *UIModel) updateTable() {
 
 		switch e := ev.(type) {
 		case *event.ExecEvent:
+			if m.viewMode != ViewAll && m.viewMode != ViewExec { continue }
 			pidStr = fmt.Sprintf("%d", e.Pid)
 			ppidStr = fmt.Sprintf("%d", e.Ppid)
 			commStr = e.CommString()
 			args = strings.Join(e.ArgvList(), " ")
 		case *event.OpenEvent:
+			if m.viewMode != ViewAll && m.viewMode != ViewOpen { continue }
 			pidStr = fmt.Sprintf("%d", e.Pid)
 			ppidStr = "-"
 			commStr = e.CommString()
 			args = e.FilenameString()
 		case *event.NetEvent:
+			if m.viewMode != ViewAll && m.viewMode != ViewNet { continue }
 			pidStr = fmt.Sprintf("%d", e.Pid)
 			ppidStr = "-"
 			commStr = e.CommString()
@@ -225,6 +251,21 @@ func (m *UIModel) View() string {
 
 	// We'll render the table and the footer inside this box.
 	var content strings.Builder
+	
+	// Render Tabs
+	tabNames := []string{"1:All", "2:Exec", "3:Open", "4:Net"}
+	activeTabStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("229")).Background(lipgloss.Color("57")).Padding(0, 1)
+	inactiveTabStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("245")).Padding(0, 1)
+	var renderedTabs []string
+	for i, name := range tabNames {
+		if ViewMode(i) == m.viewMode {
+			renderedTabs = append(renderedTabs, activeTabStyle.Render(name))
+		} else {
+			renderedTabs = append(renderedTabs, inactiveTabStyle.Render(name))
+		}
+	}
+	content.WriteString(lipgloss.JoinHorizontal(lipgloss.Top, renderedTabs...) + "\n\n")
+	
 	content.WriteString(m.table.View() + "\n")
 	
 	detailsStyle := lipgloss.NewStyle().
@@ -257,7 +298,7 @@ func (m *UIModel) View() string {
 	if m.filtering {
 		content.WriteString(m.textInput.View() + "\n")
 	} else {
-		content.WriteString(helpStyle.Render(" ↑/k up • ↓/j down • / filter • q quit") + "\n")
+		content.WriteString(helpStyle.Render(" ↑/k up • ↓/j down • Tab switch mode • / filter • q quit") + "\n")
 	}
 
 	b.WriteString(boxStyle.Render(content.String()))
