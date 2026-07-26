@@ -486,6 +486,9 @@ func (m *UIModel) renderBackground() string {
 	titleW := lipgloss.Width(titleStr)
 
 	innerWidth := m.width - 2 // Account for the outer box border
+	if innerWidth < 0 {
+		innerWidth = 0
+	}
 
 	var fullHeader string
 	if innerWidth >= logoW+titleW+infoW+4 {
