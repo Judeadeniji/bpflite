@@ -477,40 +477,17 @@ func (m *UIModel) renderBackground() string {
 		viewTitle = "MODULE"
 	}
 
-	logoStr := lipgloss.NewStyle().Foreground(lipgloss.Color("212")).Bold(true).Render(" 🐝 bpflite")
+	logoStr := lipgloss.NewStyle().Foreground(lipgloss.Color("212")).Bold(true).Render("🐝 bpflite")
 	titleStr := lipgloss.NewStyle().Foreground(lipgloss.Color("229")).Bold(true).Render(viewTitle)
-	infoStr := lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("s: switch  /: filter  q: quit ")
-
-	logoW := lipgloss.Width(logoStr)
-	infoW := lipgloss.Width(infoStr)
-	titleW := lipgloss.Width(titleStr)
+	infoStr := lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("s: switch  /: filter  q: quit")
 
 	innerWidth := m.width - 2 // Account for the outer box border
 	if innerWidth < 0 {
 		innerWidth = 0
 	}
 
-	var fullHeader string
-	if innerWidth >= logoW+titleW+infoW+4 {
-		leftPad := (innerWidth - titleW) / 2
-		rightPad := innerWidth - titleW - leftPad
-
-		if leftPad < logoW+1 {
-			leftPad = logoW + 1
-			rightPad = innerWidth - titleW - leftPad
-		}
-		if rightPad < infoW+1 {
-			rightPad = infoW + 1
-			leftPad = innerWidth - titleW - rightPad
-		}
-
-		leftSection := logoStr + strings.Repeat(" ", leftPad-logoW)
-		rightSection := strings.Repeat(" ", rightPad-infoW) + infoStr
-		fullHeader = leftSection + titleStr + rightSection
-	} else {
-		fullHeader = logoStr + "  " + titleStr + "  " + infoStr
-		fullHeader = ansi.Truncate(fullHeader, innerWidth, "")
-	}
+	fullHeader := fmt.Sprintf(" %s   |   %s   |   %s", logoStr, titleStr, infoStr)
+	fullHeader = ansi.Truncate(fullHeader, innerWidth, "")
 
 	lineStr := lipgloss.NewStyle().Foreground(lipgloss.Color("236")).Render(strings.Repeat("─", innerWidth))
 
