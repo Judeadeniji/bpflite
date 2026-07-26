@@ -20,7 +20,21 @@ type Loader struct {
 	reader *ringbuf.Reader
 }
 
-func New(traceExec, traceOpen, traceNet, traceSignal, traceOom, traceUnlink, traceMount, traceSetuid, traceBpf, traceModule bool, filterPID uint32) (*Loader, error) {
+type Config struct {
+	TraceExec   bool
+	TraceOpen   bool
+	TraceNet    bool
+	TraceSignal bool
+	TraceOom    bool
+	TraceUnlink bool
+	TraceMount  bool
+	TraceSetuid bool
+	TraceBpf    bool
+	TraceModule bool
+	FilterPID   uint32
+}
+
+func New(cfg Config) (*Loader, error) {
 	if err := rlimit.RemoveMemlock(); err != nil {
 		return nil, fmt.Errorf("remove memlock: %w", err)
 	}
@@ -30,9 +44,9 @@ func New(traceExec, traceOpen, traceNet, traceSignal, traceOom, traceUnlink, tra
 		return nil, fmt.Errorf("load bpf objects: %w", err)
 	}
 
-	if filterPID != 0 {
+	if cfg.FilterPID != 0 {
 		key := uint32(0)
-		if err := objs.TargetPidMap.Update(&key, &filterPID, 0); err != nil {
+		if err := objs.TargetPidMap.Update(&key, &cfg.FilterPID, 0); err != nil {
 			objs.Close()
 			return nil, fmt.Errorf("update pid filter: %w", err)
 		}
@@ -40,7 +54,7 @@ func New(traceExec, traceOpen, traceNet, traceSignal, traceOom, traceUnlink, tra
 
 	var links []link.Link
 
-	if traceExec {
+	if cfg.TraceExec {
 		tp, err := link.Tracepoint("syscalls", "sys_enter_execve", objs.TraceSysExecve, nil)
 		if err != nil {
 			objs.Close()
@@ -49,7 +63,7 @@ func New(traceExec, traceOpen, traceNet, traceSignal, traceOom, traceUnlink, tra
 		links = append(links, tp)
 	}
 
-	if traceOpen {
+	if cfg.TraceOpen {
 		tp, err := link.Tracepoint("syscalls", "sys_enter_openat", objs.TraceSysOpenat, nil)
 		if err != nil {
 			for _, ln := range links {
@@ -61,7 +75,7 @@ func New(traceExec, traceOpen, traceNet, traceSignal, traceOom, traceUnlink, tra
 		links = append(links, tp)
 	}
 
-	if traceNet {
+	if cfg.TraceNet {
 		tp, err := link.Tracepoint("sock", "inet_sock_set_state", objs.TraceInetSockSetState, nil)
 		if err != nil {
 			for _, ln := range links {
@@ -73,7 +87,7 @@ func New(traceExec, traceOpen, traceNet, traceSignal, traceOom, traceUnlink, tra
 		links = append(links, tp)
 	}
 
-	if traceSignal {
+	if cfg.TraceSignal {
 		tp, err := link.Tracepoint("syscalls", "sys_enter_kill", objs.TraceSysKill, nil)
 		if err != nil {
 			for _, ln := range links {
@@ -85,7 +99,7 @@ func New(traceExec, traceOpen, traceNet, traceSignal, traceOom, traceUnlink, tra
 		links = append(links, tp)
 	}
 
-	if traceOom {
+	if cfg.TraceOom {
 		tp, err := link.Tracepoint("oom", "mark_victim", objs.TraceOomMarkVictim, nil)
 		if err != nil {
 			for _, ln := range links {
@@ -97,7 +111,7 @@ func New(traceExec, traceOpen, traceNet, traceSignal, traceOom, traceUnlink, tra
 		links = append(links, tp)
 	}
 
-	if traceUnlink {
+	if cfg.TraceUnlink {
 		tp, err := link.Tracepoint("syscalls", "sys_enter_unlinkat", objs.TraceSysUnlinkat, nil)
 		if err != nil {
 			for _, ln := range links { ln.Close() }
@@ -107,7 +121,7 @@ func New(traceExec, traceOpen, traceNet, traceSignal, traceOom, traceUnlink, tra
 		links = append(links, tp)
 	}
 
-	if traceMount {
+	if cfg.TraceMount {
 		tp, err := link.Tracepoint("syscalls", "sys_enter_mount", objs.TraceSysMount, nil)
 		if err != nil {
 			for _, ln := range links { ln.Close() }
@@ -117,7 +131,7 @@ func New(traceExec, traceOpen, traceNet, traceSignal, traceOom, traceUnlink, tra
 		links = append(links, tp)
 	}
 
-	if traceSetuid {
+	if cfg.TraceSetuid {
 		tp, err := link.Tracepoint("syscalls", "sys_enter_setuid", objs.TraceSysSetuid, nil)
 		if err != nil {
 			for _, ln := range links { ln.Close() }
@@ -127,7 +141,7 @@ func New(traceExec, traceOpen, traceNet, traceSignal, traceOom, traceUnlink, tra
 		links = append(links, tp)
 	}
 
-	if traceBpf {
+	if cfg.TraceBpf {
 		tp, err := link.Tracepoint("syscalls", "sys_enter_bpf", objs.TraceSysBpf, nil)
 		if err != nil {
 			for _, ln := range links { ln.Close() }
@@ -137,7 +151,7 @@ func New(traceExec, traceOpen, traceNet, traceSignal, traceOom, traceUnlink, tra
 		links = append(links, tp)
 	}
 
-	if traceModule {
+	if cfg.TraceModule {
 		tp1, err := link.Tracepoint("syscalls", "sys_enter_finit_module", objs.TraceSysFinitModule, nil)
 		if err != nil {
 			for _, ln := range links { ln.Close() }
