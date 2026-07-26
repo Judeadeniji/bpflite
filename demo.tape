@@ -2,7 +2,7 @@
 Output demo.gif
 
 # Set up the terminal appearance
-Set FontSize 15
+Set FontSize 16
 Set Width 1366
 Set Height 768
 Set Theme "Catppuccin Mocha"
@@ -21,7 +21,7 @@ Enter
 Show
 
 # Start the tool
-Type "sudo bin/bpflite trace all"
+Type "bin/bpflite trace all"
 Enter
 Sleep 4s
 
