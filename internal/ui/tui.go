@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -11,6 +12,14 @@ import (
 
 	"bpflite/internal/event"
 )
+
+type tickMsg time.Time
+
+func tickCmd() tea.Cmd {
+	return tea.Tick(time.Millisecond*100, func(t time.Time) tea.Msg {
+		return tickMsg(t)
+	})
+}
 
 var (
 	baseStyle = lipgloss.NewStyle().
@@ -45,6 +54,7 @@ type UIModel struct {
 	viewMode       ViewMode
 	width          int
 	height         int
+	dirty          bool
 }
 
 func NewUIModel() *UIModel {
@@ -89,7 +99,7 @@ func NewUIModel() *UIModel {
 }
 
 func (m *UIModel) Init() tea.Cmd {
-	return nil
+	return tickCmd()
 }
 
 func (m *UIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -121,12 +131,19 @@ func (m *UIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		return m, nil
 
+	case tickMsg:
+		if m.dirty {
+			m.updateTable()
+			m.dirty = false
+		}
+		return m, tickCmd()
+
 	case *event.ExecEvent:
 		m.events = append(m.events, msg)
 		if len(m.events) > 1000 {
 			m.events = m.events[1:]
 		}
-		m.updateTable()
+		m.dirty = true
 		return m, nil
 
 	case *event.OpenEvent:
@@ -134,7 +151,7 @@ func (m *UIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if len(m.events) > 1000 {
 			m.events = m.events[1:]
 		}
-		m.updateTable()
+		m.dirty = true
 		return m, nil
 
 	case *event.NetEvent:
@@ -142,7 +159,7 @@ func (m *UIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if len(m.events) > 1000 {
 			m.events = m.events[1:]
 		}
-		m.updateTable()
+		m.dirty = true
 		return m, nil
 
 	case *event.SignalEvent:
@@ -150,7 +167,7 @@ func (m *UIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if len(m.events) > 1000 {
 			m.events = m.events[1:]
 		}
-		m.updateTable()
+		m.dirty = true
 		return m, nil
 
 	case *event.OomEvent:
@@ -158,7 +175,7 @@ func (m *UIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if len(m.events) > 1000 {
 			m.events = m.events[1:]
 		}
-		m.updateTable()
+		m.dirty = true
 		return m, nil
 
 	case *event.UnlinkEvent, *event.MountEvent, *event.SetuidEvent, *event.BpfEvent, *event.ModuleEvent:
@@ -166,7 +183,7 @@ func (m *UIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if len(m.events) > 1000 {
 			m.events = m.events[1:]
 		}
-		m.updateTable()
+		m.dirty = true
 		return m, nil
 
 	case tea.KeyMsg:
