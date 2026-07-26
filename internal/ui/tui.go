@@ -265,12 +265,20 @@ func (m *UIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if !m.filtering && !m.paletteOpen {
 				return m, tea.Quit
 			}
-		case "s", "ctrl+p":
+		case "ctrl+p":
 			if !m.filtering {
 				m.paletteOpen = !m.paletteOpen
 				if m.paletteOpen {
 					m.palette.ResetFilter()
+					m.palette.SetFilterState(list.Filtering)
 				}
+				return m, nil
+			}
+		case "s":
+			if !m.filtering && !m.paletteOpen {
+				m.paletteOpen = true
+				m.palette.ResetFilter()
+				m.palette.SetFilterState(list.Filtering)
 				return m, nil
 			}
 		case "f", "/":
