@@ -161,8 +161,22 @@ func (m *UIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			{Title: "ARGS", Width: argsW},
 		})
 
-		m.palette.SetWidth(msg.Width - 4)
-		m.palette.SetHeight(msg.Height - 4)
+		pw := msg.Width / 2
+		if pw < 40 {
+			pw = 40
+		}
+		if pw > 80 {
+			pw = 80
+		}
+		ph := msg.Height / 2
+		if ph < 15 {
+			ph = 15
+		}
+		if ph > 25 {
+			ph = 25
+		}
+		m.palette.SetWidth(pw)
+		m.palette.SetHeight(ph)
 
 		return m, nil
 
@@ -416,9 +430,19 @@ func (m *UIModel) View() string {
 	var content strings.Builder
 
 	if m.paletteOpen {
-		content.WriteString(m.palette.View())
-		b.WriteString(boxStyle.Render(content.String()))
-		return b.String()
+		paletteView := lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("87")).
+			Padding(1, 2).
+			Render(m.palette.View())
+
+		return lipgloss.Place(
+			m.width,
+			m.height,
+			lipgloss.Center,
+			lipgloss.Center,
+			paletteView,
+		)
 	}
 
 	// Render Header Title (Current View)

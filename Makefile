@@ -13,7 +13,7 @@ generate:
 
 build:
 	mkdir -p bin
-	go build $(LDFLAGS) -o bin/bpflite ./cmd/bpflite
+	go build -buildvcs=false $(LDFLAGS) -o bin/bpflite ./cmd/bpflite
 
 clean:
 	rm -rf bin
