@@ -48,7 +48,7 @@ func main() {
 		Use:   "exec",
 		Short: "Trace execve syscalls",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runTracer(true, false, false, false, false, false, false, false, false, false, 0)
+			return runTracer(loader.Config{TraceExec: true})
 		},
 	}
 
@@ -56,7 +56,7 @@ func main() {
 		Use:   "open",
 		Short: "Trace openat syscalls",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runTracer(false, true, false, false, false, false, false, false, false, false, pidFilter)
+			return runTracer(loader.Config{TraceOpen: true, FilterPID: pidFilter})
 		},
 	}
 
@@ -64,7 +64,7 @@ func main() {
 		Use:   "net",
 		Short: "Trace TCP connection lifecycle",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runTracer(false, false, true, false, false, false, false, false, false, false, pidFilter)
+			return runTracer(loader.Config{TraceNet: true, FilterPID: pidFilter})
 		},
 	}
 
@@ -72,7 +72,7 @@ func main() {
 		Use:   "signal",
 		Short: "Trace kill syscalls (signals)",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runTracer(false, false, false, true, false, false, false, false, false, false, pidFilter)
+			return runTracer(loader.Config{TraceSignal: true, FilterPID: pidFilter})
 		},
 	}
 
@@ -80,7 +80,7 @@ func main() {
 		Use:   "oom",
 		Short: "Trace out-of-memory (OOM) kills",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runTracer(false, false, false, false, true, false, false, false, false, false, pidFilter)
+			return runTracer(loader.Config{TraceOom: true, FilterPID: pidFilter})
 		},
 	}
 
@@ -88,7 +88,7 @@ func main() {
 		Use:   "unlink",
 		Short: "Trace unlinkat (file deletion) syscalls",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runTracer(false, false, false, false, false, true, false, false, false, false, pidFilter)
+			return runTracer(loader.Config{TraceUnlink: true, FilterPID: pidFilter})
 		},
 	}
 
@@ -96,7 +96,7 @@ func main() {
 		Use:   "mount",
 		Short: "Trace mount syscalls",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runTracer(false, false, false, false, false, false, true, false, false, false, pidFilter)
+			return runTracer(loader.Config{TraceMount: true, FilterPID: pidFilter})
 		},
 	}
 
@@ -104,7 +104,7 @@ func main() {
 		Use:   "setuid",
 		Short: "Trace setuid syscalls",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runTracer(false, false, false, false, false, false, false, true, false, false, pidFilter)
+			return runTracer(loader.Config{TraceSetuid: true, FilterPID: pidFilter})
 		},
 	}
 
@@ -112,7 +112,7 @@ func main() {
 		Use:   "bpf",
 		Short: "Trace bpf syscalls",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runTracer(false, false, false, false, false, false, false, false, true, false, pidFilter)
+			return runTracer(loader.Config{TraceBpf: true, FilterPID: pidFilter})
 		},
 	}
 
@@ -120,7 +120,7 @@ func main() {
 		Use:   "module",
 		Short: "Trace kernel module loads",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runTracer(false, false, false, false, false, false, false, false, false, true, pidFilter)
+			return runTracer(loader.Config{TraceModule: true, FilterPID: pidFilter})
 		},
 	}
 
@@ -140,7 +140,20 @@ func main() {
 		Use:   "all",
 		Short: "Trace all events simultaneously",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runTracer(true, true, true, true, true, true, true, true, true, true, pidFilter)
+			cfg := loader.Config{
+				TraceExec:   true,
+				TraceOpen:   true,
+				TraceNet:    true,
+				TraceSignal: true,
+				TraceOom:    true,
+				TraceUnlink: true,
+				TraceMount:  true,
+				TraceSetuid: true,
+				TraceBpf:    true,
+				TraceModule: true,
+				FilterPID:   pidFilter,
+			}
+			return runTracer(cfg)
 		},
 	}
 	allCmd.Flags().Uint32Var(&pidFilter, "pid", 0, "Filter events by PID")
@@ -262,7 +275,19 @@ func runDaemon() error {
 	}
 	defer os.Remove(pidFile)
 
-	l, err := loader.New(true, true, true, true, true, true, true, true, true, true, 0)
+	cfg := loader.Config{
+		TraceExec:   true,
+		TraceOpen:   true,
+		TraceNet:    true,
+		TraceSignal: true,
+		TraceOom:    true,
+		TraceUnlink: true,
+		TraceMount:  true,
+		TraceSetuid: true,
+		TraceBpf:    true,
+		TraceModule: true,
+	}
+	l, err := loader.New(cfg)
 	if err != nil {
 		slog.Error("failed to initialize loader", "error", err)
 		return err
@@ -439,8 +464,8 @@ func runHistory(limit int, formatStr string) error {
 	return nil
 }
 
-func runTracer(traceExec, traceOpen, traceNet, traceSignal, traceOom, traceUnlink, traceMount, traceSetuid, traceBpf, traceModule bool, filterPID uint32) error {
-	l, err := loader.New(traceExec, traceOpen, traceNet, traceSignal, traceOom, traceUnlink, traceMount, traceSetuid, traceBpf, traceModule, filterPID)
+func runTracer(cfg loader.Config) error {
+	l, err := loader.New(cfg)
 	if err != nil {
 		return fmt.Errorf("failed to initialize loader: %w", err)
 	}
