@@ -5,13 +5,38 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/table"
-	"github.com/charmbracelet/bubbles/textinput"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/list"
+	"charm.land/bubbles/v2/table"
+	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"bpflite/internal/event"
 )
+
+// overlayModal composites a modal string centered over a background string
+// using lipgloss v2's Canvas+Layer system for correct ANSI cell compositing.
+func overlayModal(modal, bg string, width, height int) string {
+	mw := lipgloss.Width(modal)
+	mh := lipgloss.Height(modal)
+	px := (width - mw) / 2
+	py := (height - mh) / 2
+	if px < 0 {
+		px = 0
+	}
+	if py < 0 {
+		py = 0
+	}
+
+	bgLayer := lipgloss.NewLayer(bg)
+	modalLayer := lipgloss.NewLayer(modal).X(px).Y(py).Z(1)
+
+	comp := lipgloss.NewCompositor(bgLayer, modalLayer)
+	canvas := lipgloss.NewCanvas(width, height)
+	comp.Draw(canvas, canvas.Bounds())
+	return canvas.Render()
+}
 
 type tickMsg time.Time
 
@@ -44,6 +69,15 @@ const (
 	ViewModule
 )
 
+type item struct {
+	title, desc string
+	mode        ViewMode
+}
+
+func (i item) Title() string       { return i.title }
+func (i item) Description() string { return i.desc }
+func (i item) FilterValue() string { return i.title }
+
 type UIModel struct {
 	table          table.Model
 	textInput      textinput.Model
@@ -55,6 +89,9 @@ type UIModel struct {
 	width          int
 	height         int
 	dirty          bool
+
+	palette     list.Model
+	paletteOpen bool
 }
 
 func NewUIModel() *UIModel {
@@ -87,11 +124,42 @@ func NewUIModel() *UIModel {
 	ti := textinput.New()
 	ti.Placeholder = "Filter by COMM or PID..."
 	ti.CharLimit = 50
-	ti.Width = 30
+	ti.SetWidth(30)
+
+	items := []list.Item{
+		item{title: "All", desc: "View all events simultaneously", mode: ViewAll},
+		item{title: "Exec", desc: "Process executions (sys_enter_execve)", mode: ViewExec},
+		item{title: "Open", desc: "File openings (sys_enter_openat)", mode: ViewOpen},
+		item{title: "Net", desc: "TCP connection state changes", mode: ViewNet},
+		item{title: "Signal", desc: "Signals sent (sys_enter_kill)", mode: ViewSignal},
+		item{title: "OOM", desc: "Out-of-memory kills (mark_victim)", mode: ViewOom},
+		item{title: "Unlink", desc: "File deletions (sys_enter_unlinkat)", mode: ViewUnlink},
+		item{title: "Mount", desc: "Filesystem mounts (sys_enter_mount)", mode: ViewMount},
+		item{title: "Setuid", desc: "Privilege escalations (sys_enter_setuid)", mode: ViewSetuid},
+		item{title: "Bpf", desc: "BPF program loading (sys_enter_bpf)", mode: ViewBpf},
+		item{title: "Module", desc: "Kernel module loading (init/finit_module)", mode: ViewModule},
+	}
+	pal := list.New(items, list.NewDefaultDelegate(), 40, 20)
+	pal.Title = "Switch Tracer"
+	pal.SetShowHelp(false)
+	pal.SetShowStatusBar(false)
+
+	// Ensure the filter text input inherits the modal's background to prevent black spots
+	bg := lipgloss.Color("235")
+	pal.Styles.Filter.Focused.Text = pal.Styles.Filter.Focused.Text.Background(bg)
+	pal.Styles.Filter.Focused.Prompt = pal.Styles.Filter.Focused.Prompt.Background(bg)
+	pal.Styles.Filter.Focused.Placeholder = pal.Styles.Filter.Focused.Placeholder.Background(bg)
+	pal.Styles.Filter.Focused.Suggestion = pal.Styles.Filter.Focused.Suggestion.Background(bg)
+	
+	pal.Styles.Filter.Blurred.Text = pal.Styles.Filter.Blurred.Text.Background(bg)
+	pal.Styles.Filter.Blurred.Prompt = pal.Styles.Filter.Blurred.Prompt.Background(bg)
+	pal.Styles.Filter.Blurred.Placeholder = pal.Styles.Filter.Blurred.Placeholder.Background(bg)
+	pal.Styles.Filter.Blurred.Suggestion = pal.Styles.Filter.Blurred.Suggestion.Background(bg)
 
 	return &UIModel{
 		table:          t,
 		textInput:      ti,
+		palette:        pal,
 		events:         make([]interface{}, 0),
 		filteredEvents: make([]interface{}, 0),
 		viewMode:       ViewAll,
@@ -128,6 +196,23 @@ func (m *UIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			{Title: "COMM", Width: 15},
 			{Title: "ARGS", Width: argsW},
 		})
+
+		pw := msg.Width / 2
+		if pw < 40 {
+			pw = 40
+		}
+		if pw > 80 {
+			pw = 80
+		}
+		ph := msg.Height / 2
+		if ph < 15 {
+			ph = 15
+		}
+		if ph > 25 {
+			ph = 25
+		}
+		m.palette.SetWidth(pw)
+		m.palette.SetHeight(ph)
 
 		return m, nil
 
@@ -186,54 +271,76 @@ func (m *UIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.dirty = true
 		return m, nil
 
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		switch msg.String() {
 		case "ctrl+c", "q":
-			if !m.filtering {
+			if !m.filtering && !m.paletteOpen {
 				return m, tea.Quit
 			}
-		case "f", "/":
+		case "ctrl+p":
 			if !m.filtering {
+				m.paletteOpen = !m.paletteOpen
+				if m.paletteOpen {
+					m.palette.ResetFilter()
+				}
+				return m, nil
+			}
+		case "s":
+			if !m.filtering && !m.paletteOpen {
+				m.paletteOpen = true
+				m.palette.ResetFilter()
+				return m, nil
+			}
+		case "f", "/":
+			if !m.filtering && !m.paletteOpen {
 				m.filtering = true
 				m.textInput.Focus()
-				return m, textinput.Blink
-			}
-		case "tab":
-			if !m.filtering {
-				m.viewMode = (m.viewMode + 1) % 11
-				m.updateTable()
 				return m, nil
 			}
-		case "1", "2", "3", "4", "5", "6", "7", "8", "9":
-			if !m.filtering {
-				m.viewMode = ViewMode(msg.String()[0] - '1')
-				m.updateTable()
-				return m, nil
-			}
-		case "0":
-			if !m.filtering {
-				m.viewMode = ViewMode(9)
-				m.updateTable()
-				return m, nil
-			}
-		case "-":
-			if !m.filtering {
-				m.viewMode = ViewMode(10)
-				m.updateTable()
-				return m, nil
-			}
-		case "enter", "esc":
+		case "enter":
 			if m.filtering {
 				m.filtering = false
 				m.textInput.Blur()
 				m.filterText = m.textInput.Value()
 				m.updateTable()
 				return m, nil
+			} else if m.paletteOpen {
+				if i, ok := m.palette.SelectedItem().(item); ok {
+					m.viewMode = i.mode
+					m.paletteOpen = false
+					m.updateTable()
+				}
+				return m, nil
+			}
+		case "esc":
+			if m.filtering {
+				m.filtering = false
+				m.textInput.Blur()
+				m.filterText = ""
+				m.textInput.SetValue("")
+				m.updateTable()
+				return m, nil
+			} else if m.filterText != "" && !m.paletteOpen {
+				m.filterText = ""
+				m.textInput.SetValue("")
+				m.updateTable()
+				return m, nil
+			}
+			if m.paletteOpen {
+				if m.palette.FilterState() == list.Filtering {
+					// Let bubbles/list handle esc to cancel the filter
+					break
+				}
+				m.paletteOpen = false
+				return m, nil
 			}
 		}
 	}
 
-	if m.filtering {
+	if m.paletteOpen {
+		m.palette, cmd = m.palette.Update(msg)
+		cmds = append(cmds, cmd)
+	} else if m.filtering {
 		m.textInput, cmd = m.textInput.Update(msg)
 		cmds = append(cmds, cmd)
 		m.filterText = m.textInput.Value()
@@ -364,29 +471,57 @@ func (m *UIModel) updateTable() {
 	}
 }
 
-func (m *UIModel) View() string {
+func (m *UIModel) renderBackground() string {
 	var b strings.Builder
 
 	boxStyle := baseStyle.
 		Width(m.width - 2).
 		Height(m.height - 2)
 
-	// We'll render the table and the footer inside this box.
 	var content strings.Builder
 
-	// Render Tabs
-	tabNames := []string{"1:All", "2:Exec", "3:Open", "4:Net", "5:Sig", "6:Oom", "7:Unlink", "8:Mount", "9:Setuid", "0:Bpf", "-:Module"}
-	activeTabStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("229")).Background(lipgloss.Color("57")).Padding(0, 1)
-	inactiveTabStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("245")).Padding(0, 1)
-	var renderedTabs []string
-	for i, name := range tabNames {
-		if ViewMode(i) == m.viewMode {
-			renderedTabs = append(renderedTabs, activeTabStyle.Render(name))
-		} else {
-			renderedTabs = append(renderedTabs, inactiveTabStyle.Render(name))
-		}
+	// Render Header Title (Current View)
+	viewTitle := "ALL EVENTS"
+	switch m.viewMode {
+	case ViewExec:
+		viewTitle = "EXEC"
+	case ViewOpen:
+		viewTitle = "OPEN"
+	case ViewNet:
+		viewTitle = "NET"
+	case ViewSignal:
+		viewTitle = "SIGNAL"
+	case ViewOom:
+		viewTitle = "OOM"
+	case ViewUnlink:
+		viewTitle = "UNLINK"
+	case ViewMount:
+		viewTitle = "MOUNT"
+	case ViewSetuid:
+		viewTitle = "SETUID"
+	case ViewBpf:
+		viewTitle = "BPF"
+	case ViewModule:
+		viewTitle = "MODULE"
 	}
-	content.WriteString(lipgloss.JoinHorizontal(lipgloss.Top, renderedTabs...))
+
+	logoStr := lipgloss.NewStyle().Foreground(lipgloss.Color("212")).Bold(true).Render("🐝 bpflite")
+	titleStr := lipgloss.NewStyle().Foreground(lipgloss.Color("229")).Bold(true).Render(viewTitle)
+	infoStr := lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("s: switch  /: filter  q: quit")
+
+	innerWidth := m.width - 2 // Account for the outer box border
+	if innerWidth < 0 {
+		innerWidth = 0
+	}
+
+	fullHeader := fmt.Sprintf(" %s   |   %s   |   %s", logoStr, titleStr, infoStr)
+	fullHeader = ansi.Truncate(fullHeader, innerWidth, "")
+
+	lineStr := lipgloss.NewStyle().Foreground(lipgloss.Color("236")).Render(strings.Repeat("─", innerWidth))
+
+	content.WriteString(fullHeader)
+	content.WriteString("\n")
+	content.WriteString(lineStr)
 	content.WriteString("\n\n")
 
 	content.WriteString(m.table.View())
@@ -441,15 +576,46 @@ func (m *UIModel) View() string {
 	content.WriteString(detailsStyle.Render(detailsText))
 	content.WriteString("\n")
 
-	if m.filtering {
-		content.WriteString(m.textInput.View())
-		content.WriteString("\n")
-	} else {
-		content.WriteString(helpStyle.Render(" ↑/k up • ↓/j down • Tab switch mode • / filter • q quit"))
-		content.WriteString("\n")
-	}
+	content.WriteString(helpStyle.Render(" ↑/k up • ↓/j down • Ctrl+P switch tracer • / filter • q quit"))
+	content.WriteString("\n")
 
 	b.WriteString(boxStyle.Render(content.String()))
-
 	return b.String()
+}
+
+func (m *UIModel) View() tea.View {
+	v := func(s string) tea.View {
+		view := tea.NewView(s)
+		view.AltScreen = true
+		return view
+	}
+
+	if m.paletteOpen {
+		// Render the full background first so events stay visible behind the modal.
+		bgStr := m.renderBackground()
+
+		paletteStr := lipgloss.NewStyle().
+			Width(50).
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("87")).
+			BorderBackground(lipgloss.Color("235")).
+			Background(lipgloss.Color("235")).
+			Padding(1, 2).
+			Render(m.palette.View())
+
+		return v(overlayModal(paletteStr, bgStr, m.width, m.height))
+	}
+
+	bg := m.renderBackground()
+
+	if m.filtering {
+		// Inject filter input into the last line of the background
+		lines := strings.Split(bg, "\n")
+		if len(lines) > 1 {
+			lines[len(lines)-2] = " " + m.textInput.View()
+		}
+		return v(strings.Join(lines, "\n"))
+	}
+
+	return v(bg)
 }

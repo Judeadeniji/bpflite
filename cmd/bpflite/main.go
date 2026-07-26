@@ -18,8 +18,8 @@ import (
 	"bpflite/internal/loader"
 	"bpflite/internal/ui"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/cilium/ebpf/ringbuf"
 	"github.com/spf13/cobra"
 	"gopkg.in/natefinch/lumberjack.v2"
@@ -502,7 +502,7 @@ func runJSON(l *loader.Loader) {
 }
 
 func runTUI(l *loader.Loader) {
-	p := tea.NewProgram(ui.NewUIModel(), tea.WithAltScreen())
+	p := tea.NewProgram(ui.NewUIModel())
 
 	go func() {
 		for {
