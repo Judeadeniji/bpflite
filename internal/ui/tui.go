@@ -476,8 +476,33 @@ func (m *UIModel) renderBackground() string {
 		viewTitle = "MODULE"
 	}
 
-	headerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("229")).Background(lipgloss.Color("57")).Padding(0, 2).Bold(true)
-	content.WriteString(headerStyle.Render(fmt.Sprintf("◀  %s  ▶", viewTitle)))
+	logo := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("212")).
+		Bold(true).
+		MarginRight(2).
+		Render("🐝 bpflite")
+		
+	title := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("229")).
+		Background(lipgloss.Color("57")).
+		Padding(0, 1).
+		Render(viewTitle)
+		
+	info := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("240")).
+		MarginLeft(2).
+		Render("• 's' switch • '/' filter • 'q' quit")
+		
+	headerGroup := lipgloss.JoinHorizontal(lipgloss.Center, logo, title, info)
+	
+	lineStr := strings.Repeat("─", lipgloss.Width(headerGroup))
+	line := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("236")).
+		Render(lineStr)
+		
+	fullHeader := lipgloss.PlaceHorizontal(m.width, lipgloss.Center, headerGroup+"\n"+line)
+
+	content.WriteString(fullHeader)
 	content.WriteString("\n\n")
 
 	content.WriteString(m.table.View())
