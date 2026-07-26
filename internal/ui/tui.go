@@ -10,9 +10,59 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	"bpflite/internal/event"
 )
+
+// placeOverlay paints fg (a multi-line ANSI string) on top of bg (another
+// multi-line ANSI string) at column x, row y (0-indexed, terminal coords).
+// Lines/columns outside bg are silently clipped. ANSI escape codes in bg
+// that fall "behind" fg are preserved on surrounding lines.
+func placeOverlay(x, y int, fg, bg string) string {
+	bgLines := strings.Split(bg, "\n")
+	fgLines := strings.Split(fg, "\n")
+
+	for i, fgLine := range fgLines {
+		row := y + i
+		if row < 0 || row >= len(bgLines) {
+			continue
+		}
+		bgLine := bgLines[row]
+		bgW := ansi.StringWidth(bgLine)
+		fgW := ansi.StringWidth(fgLine)
+
+		// Build left segment: bg up to column x (preserving ANSI)
+		left := truncateAnsi(bgLine, x)
+		// Pad if bg is shorter than x
+		if ansi.StringWidth(left) < x {
+			left += strings.Repeat(" ", x-ansi.StringWidth(left))
+		}
+
+		// Build right segment: bg from column x+fgW onwards
+		rightStart := x + fgW
+		var right string
+		if rightStart < bgW {
+			right = cutAnsi(bgLine, rightStart)
+		}
+
+		bgLines[row] = left + fgLine + right
+	}
+	return strings.Join(bgLines, "\n")
+}
+
+// truncateAnsi returns the first `w` visible columns of s, preserving ANSI codes.
+func truncateAnsi(s string, w int) string {
+	if w <= 0 {
+		return ""
+	}
+	return ansi.Truncate(s, w, "")
+}
+
+// cutAnsi returns the visible content of s starting at visible column `start`.
+func cutAnsi(s string, start int) string {
+	return ansi.Cut(s, start, ansi.StringWidth(s))
+}
 
 type tickMsg time.Time
 
@@ -419,31 +469,14 @@ func (m *UIModel) updateTable() {
 	}
 }
 
-func (m *UIModel) View() string {
+func (m *UIModel) renderBackground() string {
 	var b strings.Builder
 
 	boxStyle := baseStyle.
 		Width(m.width - 2).
 		Height(m.height - 2)
 
-	// We'll render the table and the footer inside this box.
 	var content strings.Builder
-
-	if m.paletteOpen {
-		paletteView := lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("87")).
-			Padding(1, 2).
-			Render(m.palette.View())
-
-		return lipgloss.Place(
-			m.width,
-			m.height,
-			lipgloss.Center,
-			lipgloss.Center,
-			paletteView,
-		)
-	}
 
 	// Render Header Title (Current View)
 	viewTitle := "ALL EVENTS"
@@ -469,7 +502,7 @@ func (m *UIModel) View() string {
 	case ViewModule:
 		viewTitle = "MODULE"
 	}
-	
+
 	headerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("229")).Background(lipgloss.Color("57")).Padding(0, 2).Bold(true)
 	content.WriteString(headerStyle.Render(fmt.Sprintf("◀  %s  ▶", viewTitle)))
 	content.WriteString("\n\n")
@@ -526,15 +559,50 @@ func (m *UIModel) View() string {
 	content.WriteString(detailsStyle.Render(detailsText))
 	content.WriteString("\n")
 
-	if m.filtering {
-		content.WriteString(m.textInput.View())
-		content.WriteString("\n")
-	} else {
-		content.WriteString(helpStyle.Render(" ↑/k up • ↓/j down • Ctrl+P switch tracer • / filter • q quit"))
-		content.WriteString("\n")
-	}
+	content.WriteString(helpStyle.Render(" ↑/k up • ↓/j down • Ctrl+P switch tracer • / filter • q quit"))
+	content.WriteString("\n")
 
 	b.WriteString(boxStyle.Render(content.String()))
-
 	return b.String()
 }
+
+func (m *UIModel) View() string {
+	if m.paletteOpen {
+		// Render the full background first so events stay visible behind the modal.
+		bgStr := m.renderBackground()
+
+		paletteView := lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("87")).
+			Background(lipgloss.Color("235")).
+			Padding(1, 2).
+			Render(m.palette.View())
+
+		pw := lipgloss.Width(paletteView)
+		ph := lipgloss.Height(paletteView)
+		px := (m.width - pw) / 2
+		py := (m.height - ph) / 2
+		if px < 0 {
+			px = 0
+		}
+		if py < 0 {
+			py = 0
+		}
+
+		return placeOverlay(px, py, paletteView, bgStr)
+	}
+
+	bg := m.renderBackground()
+
+	if m.filtering {
+		// Inject filter input into the last line of the background
+		lines := strings.Split(bg, "\n")
+		if len(lines) > 1 {
+			lines[len(lines)-2] = " " + m.textInput.View()
+		}
+		return strings.Join(lines, "\n")
+	}
+
+	return bg
+}
+
