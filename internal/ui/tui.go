@@ -567,6 +567,12 @@ func (m *UIModel) renderBackground() string {
 }
 
 func (m *UIModel) View() tea.View {
+	v := func(s string) tea.View {
+		view := tea.NewView(s)
+		view.AltScreen = true
+		return view
+	}
+
 	if m.paletteOpen {
 		// Render the full background first so events stay visible behind the modal.
 		bgStr := m.renderBackground()
@@ -589,7 +595,7 @@ func (m *UIModel) View() tea.View {
 			py = 0
 		}
 
-		return tea.NewView(placeOverlay(px, py, paletteStr, bgStr))
+		return v(placeOverlay(px, py, paletteStr, bgStr))
 	}
 
 	bg := m.renderBackground()
@@ -600,8 +606,9 @@ func (m *UIModel) View() tea.View {
 		if len(lines) > 1 {
 			lines[len(lines)-2] = " " + m.textInput.View()
 		}
-		return tea.NewView(strings.Join(lines, "\n"))
+		return v(strings.Join(lines, "\n"))
 	}
 
-	return tea.NewView(bg)
+	return v(bg)
 }
+
