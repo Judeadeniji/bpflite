@@ -10,58 +10,31 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/charmbracelet/x/ansi"
 
 	"bpflite/internal/event"
 )
 
-// placeOverlay paints fg (a multi-line ANSI string) on top of bg (another
-// multi-line ANSI string) at column x, row y (0-indexed, terminal coords).
-// Lines/columns outside bg are silently clipped. ANSI escape codes in bg
-// that fall "behind" fg are preserved on surrounding lines.
-func placeOverlay(x, y int, fg, bg string) string {
-	bgLines := strings.Split(bg, "\n")
-	fgLines := strings.Split(fg, "\n")
-
-	for i, fgLine := range fgLines {
-		row := y + i
-		if row < 0 || row >= len(bgLines) {
-			continue
-		}
-		bgLine := bgLines[row]
-		bgW := ansi.StringWidth(bgLine)
-		fgW := ansi.StringWidth(fgLine)
-
-		// Build left segment: bg up to column x (preserving ANSI)
-		left := truncateAnsi(bgLine, x)
-		// Pad if bg is shorter than x
-		if ansi.StringWidth(left) < x {
-			left += strings.Repeat(" ", x-ansi.StringWidth(left))
-		}
-
-		// Build right segment: bg from column x+fgW onwards
-		rightStart := x + fgW
-		var right string
-		if rightStart < bgW {
-			right = cutAnsi(bgLine, rightStart)
-		}
-
-		bgLines[row] = left + fgLine + right
+// overlayModal composites a modal string centered over a background string
+// using lipgloss v2's Canvas+Layer system for correct ANSI cell compositing.
+func overlayModal(modal, bg string, width, height int) string {
+	mw := lipgloss.Width(modal)
+	mh := lipgloss.Height(modal)
+	px := (width - mw) / 2
+	py := (height - mh) / 2
+	if px < 0 {
+		px = 0
 	}
-	return strings.Join(bgLines, "\n")
-}
-
-// truncateAnsi returns the first `w` visible columns of s, preserving ANSI codes.
-func truncateAnsi(s string, w int) string {
-	if w <= 0 {
-		return ""
+	if py < 0 {
+		py = 0
 	}
-	return ansi.Truncate(s, w, "")
-}
 
-// cutAnsi returns the visible content of s starting at visible column `start`.
-func cutAnsi(s string, start int) string {
-	return ansi.Cut(s, start, ansi.StringWidth(s))
+	bgLayer := lipgloss.NewLayer(bg)
+	modalLayer := lipgloss.NewLayer(modal).X(px).Y(py).Z(1)
+
+	return lipgloss.NewCanvas(width, height).
+		Compose(bgLayer).
+		Compose(modalLayer).
+		Render()
 }
 
 type tickMsg time.Time
@@ -584,18 +557,7 @@ func (m *UIModel) View() tea.View {
 			Padding(1, 2).
 			Render(m.palette.View())
 
-		pw := lipgloss.Width(paletteStr)
-		ph := lipgloss.Height(paletteStr)
-		px := (m.width - pw) / 2
-		py := (m.height - ph) / 2
-		if px < 0 {
-			px = 0
-		}
-		if py < 0 {
-			py = 0
-		}
-
-		return v(placeOverlay(px, py, paletteStr, bgStr))
+		return v(overlayModal(paletteStr, bgStr, m.width, m.height))
 	}
 
 	bg := m.renderBackground()
