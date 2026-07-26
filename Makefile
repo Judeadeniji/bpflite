@@ -1,9 +1,12 @@
-.PHONY: all generate build clean
+.PHONY: all lint generate build clean
 
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 LDFLAGS := -ldflags "-s -w -X main.version=$(VERSION)"
 
-all: generate build
+all: lint generate build
+
+lint:
+	golangci-lint run ./...
 
 generate:
 	go generate ./...
