@@ -552,7 +552,6 @@ func (m *UIModel) View() tea.View {
 
 		paletteStr := lipgloss.NewStyle().
 			Width(50).
-			Height(26).
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(lipgloss.Color("87")).
 			BorderBackground(lipgloss.Color("235")).
