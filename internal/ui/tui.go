@@ -264,7 +264,7 @@ func (m *UIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if !m.filtering && !m.paletteOpen {
 				return m, tea.Quit
 			}
-		case "ctrl+p":
+		case "s", "ctrl+p":
 			if !m.filtering {
 				m.paletteOpen = !m.paletteOpen
 				if m.paletteOpen {
@@ -476,31 +476,44 @@ func (m *UIModel) renderBackground() string {
 		viewTitle = "MODULE"
 	}
 
-	logo := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("212")).
-		Bold(true).
-		MarginRight(2).
-		Render("🐝 bpflite")
-		
-	title := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("229")).
-		Background(lipgloss.Color("57")).
-		Padding(0, 1).
-		Render(viewTitle)
-		
-	info := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("240")).
-		MarginLeft(2).
-		Render("• 's' switch • '/' filter • 'q' quit")
-		
-	headerGroup := lipgloss.JoinHorizontal(lipgloss.Center, logo, title, info)
+	bgStyle := lipgloss.NewStyle().Background(lipgloss.Color("57"))
 	
-	lineStr := strings.Repeat("─", lipgloss.Width(headerGroup))
-	line := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("236")).
-		Render(lineStr)
+	logoText := " 🐝 bpflite"
+	infoText := "s: switch  /: filter  q: quit "
+	titleText := viewTitle
+
+	logoW := lipgloss.Width(logoText)
+	infoW := lipgloss.Width(infoText)
+	sideW := logoW
+	if infoW > sideW {
+		sideW = infoW
+	}
+	
+	left := bgStyle.Copy().
+		Foreground(lipgloss.Color("229")).
+		Bold(true).
+		Width(sideW).
+		Align(lipgloss.Left).
+		Render(logoText)
 		
-	fullHeader := lipgloss.PlaceHorizontal(m.width, lipgloss.Center, headerGroup+"\n"+line)
+	right := bgStyle.Copy().
+		Foreground(lipgloss.Color("229")).
+		Width(sideW).
+		Align(lipgloss.Right).
+		Render(infoText)
+		
+	centerW := m.width - (sideW * 2)
+	center := ""
+	if centerW > 0 {
+		center = bgStyle.Copy().
+			Foreground(lipgloss.Color("255")).
+			Bold(true).
+			Width(centerW).
+			Align(lipgloss.Center).
+			Render(titleText)
+	}
+
+	fullHeader := lipgloss.JoinHorizontal(lipgloss.Top, left, center, right)
 
 	content.WriteString(fullHeader)
 	content.WriteString("\n\n")
