@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"log/slog"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -21,6 +22,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/cilium/ebpf/ringbuf"
 	"github.com/spf13/cobra"
+	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 var (
@@ -108,16 +110,17 @@ func main() {
 				if err := os.MkdirAll("data", 0755); err != nil {
 					fmt.Fprintf(os.Stderr, "failed to create data dir: %v\n", err)
 				}
-				logFile, err := os.OpenFile("data/bpflite.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+				crashFile, err := os.OpenFile("data/bpflite-crash.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 				if err != nil {
 					return err
 				}
+				defer crashFile.Close()
 
 				execArgs := []string{"record"}
 				c := exec.Command(os.Args[0], execArgs...)
 				c.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
-				c.Stdout = logFile
-				c.Stderr = logFile
+				c.Stdout = crashFile
+				c.Stderr = crashFile
 
 				if err := c.Start(); err != nil {
 					return err
@@ -193,28 +196,42 @@ func main() {
 
 func runDaemon() error {
 	if err := os.MkdirAll("data", 0755); err != nil {
-		fmt.Fprintf(os.Stderr, "failed to create data dir for pid file: %v\n", err)
+		return fmt.Errorf("failed to create data dir: %w", err)
 	}
+
+	logWriter := &lumberjack.Logger{
+		Filename:   "data/bpflite.log",
+		MaxSize:    100, // megabytes
+		MaxBackups: 30,  // max files
+		MaxAge:     30,  // days
+		Compress:   true, // gzip compressed
+	}
+	defer logWriter.Close()
+
+	logger := slog.New(slog.NewJSONHandler(logWriter, nil))
+	slog.SetDefault(logger)
 
 	pidFile := "data/bpflite.pid"
 	if err := os.WriteFile(pidFile, fmt.Appendf(nil, "%d\n", os.Getpid()), 0644); err != nil {
-		fmt.Fprintf(os.Stderr, "failed to write pid file: %v\n", err)
+		slog.Error("failed to write pid file", "error", err)
 	}
 	defer os.Remove(pidFile)
 
 	l, err := loader.New(true, true, true, true, true, 0)
 	if err != nil {
-		return fmt.Errorf("failed to initialize loader: %w", err)
+		slog.Error("failed to initialize loader", "error", err)
+		return err
 	}
 	defer l.Close()
 
 	database, err := db.New("data/bpflite.sqlite")
 	if err != nil {
-		return fmt.Errorf("failed to open database: %w", err)
+		slog.Error("failed to open database", "error", err)
+		return err
 	}
 	defer database.Close()
 
-	fmt.Println("bpflite daemon running. Recording events to data/bpflite.sqlite...")
+	slog.Info("bpflite daemon running", "db", "data/bpflite.sqlite")
 
 	events := make(chan interface{}, 1000)
 	go func() {
@@ -224,7 +241,7 @@ func runDaemon() error {
 				if err.Error() == "ring buffer closed" {
 					return
 				}
-				fmt.Printf("Error reading event: %v\n", err)
+				slog.Error("error reading event", "error", err)
 				continue
 			}
 			events <- e
@@ -237,29 +254,29 @@ func runDaemon() error {
 	for {
 		select {
 		case <-sig:
-			fmt.Println("\nShutting down daemon...")
+			slog.Info("shutting down daemon")
 			return nil
 		case e := <-events:
 			switch ev := e.(type) {
 			case *event.ExecEvent:
 				if err := database.InsertExec(ev); err != nil {
-					fmt.Fprintf(os.Stderr, "failed to insert exec event: %v\n", err)
+					slog.Error("failed to insert exec event", "error", err)
 				}
 			case *event.OpenEvent:
 				if err := database.InsertOpen(ev); err != nil {
-					fmt.Fprintf(os.Stderr, "failed to insert open event: %v\n", err)
+					slog.Error("failed to insert open event", "error", err)
 				}
 			case *event.NetEvent:
 				if err := database.InsertNet(ev); err != nil {
-					fmt.Fprintf(os.Stderr, "failed to insert net event: %v\n", err)
+					slog.Error("failed to insert net event", "error", err)
 				}
 			case *event.SignalEvent:
 				if err := database.InsertSignal(ev); err != nil {
-					fmt.Fprintf(os.Stderr, "failed to insert signal event: %v\n", err)
+					slog.Error("failed to insert signal event", "error", err)
 				}
 			case *event.OomEvent:
 				if err := database.InsertOom(ev); err != nil {
-					fmt.Fprintf(os.Stderr, "failed to insert oom event: %v\n", err)
+					slog.Error("failed to insert oom event", "error", err)
 				}
 			}
 		}

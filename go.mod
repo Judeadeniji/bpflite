@@ -8,6 +8,8 @@ require (
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/cilium/ebpf v0.22.0
 	github.com/spf13/cobra v1.10.2
+	gopkg.in/natefinch/lumberjack.v2 v2.2.1
+	modernc.org/sqlite v1.54.0
 )
 
 require (
@@ -41,5 +43,4 @@ require (
 	modernc.org/libc v1.74.1 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
-	modernc.org/sqlite v1.54.0 // indirect
 )
