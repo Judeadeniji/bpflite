@@ -485,18 +485,20 @@ func (m *UIModel) renderBackground() string {
 	infoW := lipgloss.Width(infoStr)
 	titleW := lipgloss.Width(titleStr)
 
+	innerWidth := m.width - 2 // Account for the outer box border
+
 	var fullHeader string
-	if m.width >= logoW+titleW+infoW+4 {
-		leftPad := (m.width - titleW) / 2
-		rightPad := m.width - titleW - leftPad
+	if innerWidth >= logoW+titleW+infoW+4 {
+		leftPad := (innerWidth - titleW) / 2
+		rightPad := innerWidth - titleW - leftPad
 
 		if leftPad < logoW+1 {
 			leftPad = logoW + 1
-			rightPad = m.width - titleW - leftPad
+			rightPad = innerWidth - titleW - leftPad
 		}
 		if rightPad < infoW+1 {
 			rightPad = infoW + 1
-			leftPad = m.width - titleW - rightPad
+			leftPad = innerWidth - titleW - rightPad
 		}
 
 		leftSection := logoStr + strings.Repeat(" ", leftPad-logoW)
@@ -504,12 +506,14 @@ func (m *UIModel) renderBackground() string {
 		fullHeader = leftSection + titleStr + rightSection
 	} else {
 		fullHeader = logoStr + "  " + titleStr + "  " + infoStr
-		fullHeader = ansi.Truncate(fullHeader, m.width, "")
+		fullHeader = ansi.Truncate(fullHeader, innerWidth, "")
 	}
 
-	lineStr := lipgloss.NewStyle().Foreground(lipgloss.Color("236")).Render(strings.Repeat("─", m.width))
+	lineStr := lipgloss.NewStyle().Foreground(lipgloss.Color("236")).Render(strings.Repeat("─", innerWidth))
 
-	content.WriteString(fullHeader + "\n" + lineStr)
+	content.WriteString(fullHeader)
+	content.WriteString("\n")
+	content.WriteString(lineStr)
 	content.WriteString("\n\n")
 
 	content.WriteString(m.table.View())
@@ -607,4 +611,3 @@ func (m *UIModel) View() tea.View {
 
 	return v(bg)
 }
-
