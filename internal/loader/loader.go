@@ -20,7 +20,7 @@ type Loader struct {
 	reader *ringbuf.Reader
 }
 
-func New(traceExec bool, traceOpen bool, traceNet bool, traceSignal bool, filterPID uint32) (*Loader, error) {
+func New(traceExec bool, traceOpen bool, traceNet bool, traceSignal bool, traceOom bool, filterPID uint32) (*Loader, error) {
 	if err := rlimit.RemoveMemlock(); err != nil {
 		return nil, fmt.Errorf("remove memlock: %w", err)
 	}
@@ -81,6 +81,18 @@ func New(traceExec bool, traceOpen bool, traceNet bool, traceSignal bool, filter
 			}
 			objs.Close()
 			return nil, fmt.Errorf("attach sys_enter_kill tracepoint: %w", err)
+		}
+		links = append(links, tp)
+	}
+
+	if traceOom {
+		tp, err := link.Tracepoint("oom", "mark_victim", objs.TraceOomMarkVictim, nil)
+		if err != nil {
+			for _, ln := range links {
+				ln.Close()
+			}
+			objs.Close()
+			return nil, fmt.Errorf("attach oom/mark_victim tracepoint: %w", err)
 		}
 		links = append(links, tp)
 	}
@@ -161,6 +173,13 @@ func (l *Loader) ReadEvent() (interface{}, error) {
 			return nil, fmt.Errorf("decode signal event: %w", err)
 		}
 		return &e, nil
+	case event.TypeOom:
+		var e event.OomEvent
+		if err := binary.Read(bytes.NewReader(record.RawSample), binary.LittleEndian, &e); err != nil {
+			return nil, fmt.Errorf("decode oom event: %w", err)
+		}
+		return &e, nil
+
 	default:
 		return nil, fmt.Errorf("unknown event type: %d", header.Type)
 	}

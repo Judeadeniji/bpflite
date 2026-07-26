@@ -27,6 +27,7 @@ const (
 	ViewOpen
 	ViewNet
 	ViewSignal
+	ViewOom
 )
 
 type UIModel struct {
@@ -147,6 +148,14 @@ func (m *UIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.updateTable()
 		return m, nil
 
+	case *event.OomEvent:
+		m.events = append(m.events, msg)
+		if len(m.events) > 1000 {
+			m.events = m.events[1:]
+		}
+		m.updateTable()
+		return m, nil
+
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "ctrl+c", "q":
@@ -161,11 +170,11 @@ func (m *UIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "tab":
 			if !m.filtering {
-				m.viewMode = (m.viewMode + 1) % 5
+				m.viewMode = (m.viewMode + 1) % 6
 				m.updateTable()
 				return m, nil
 			}
-		case "1", "2", "3", "4", "5":
+		case "1", "2", "3", "4", "5", "6":
 			if !m.filtering {
 				m.viewMode = ViewMode(msg.String()[0] - '1')
 				m.updateTable()
@@ -236,6 +245,14 @@ func (m *UIModel) updateTable() {
 			ppidStr = "-"
 			commStr = e.CommString()
 			args = fmt.Sprintf("sent SIG %d to PID %d", e.Sig, e.Tpid)
+		case *event.OomEvent:
+			if m.viewMode != ViewAll && m.viewMode != ViewOom {
+				continue
+			}
+			pidStr = fmt.Sprintf("%d", e.TriggerPid)
+			ppidStr = "-"
+			commStr = e.TriggerCommString()
+			args = fmt.Sprintf("killed %s (PID %d) reclaiming %d pages", e.VictimCommString(), e.VictimPid, e.Pages)
 		}
 
 		if m.filterText != "" {
@@ -276,7 +293,7 @@ func (m *UIModel) View() string {
 	var content strings.Builder
 
 	// Render Tabs
-	tabNames := []string{"1:All", "2:Exec", "3:Open", "4:Net", "5:Signal"}
+	tabNames := []string{"1:All", "2:Exec", "3:Open", "4:Net", "5:Signal", "6:Oom"}
 	activeTabStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("229")).Background(lipgloss.Color("57")).Padding(0, 1)
 	inactiveTabStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("245")).Padding(0, 1)
 	var renderedTabs []string
@@ -316,6 +333,9 @@ func (m *UIModel) View() string {
 		case *event.SignalEvent:
 			detailsText = lipgloss.NewStyle().Foreground(lipgloss.Color("202")).Bold(true).Render("SIGNAL") + " " + e.CommString() + "\n\n" +
 				lipgloss.NewStyle().Foreground(lipgloss.Color("252")).Render(fmt.Sprintf("Process %s (PID %d) sent signal %d to target PID %d", e.CommString(), e.Pid, e.Sig, e.Tpid))
+		case *event.OomEvent:
+			detailsText = lipgloss.NewStyle().Foreground(lipgloss.Color("196")).Bold(true).Render("OOM") + " " + e.TriggerCommString() + "\n\n" +
+				lipgloss.NewStyle().Foreground(lipgloss.Color("252")).Render(fmt.Sprintf("Process %s (PID %d) was killed due to Out-Of-Memory, reclaiming %d pages", e.VictimCommString(), e.VictimPid, e.Pages))
 		}
 	} else {
 		detailsText = lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("No event selected")

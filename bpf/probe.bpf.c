@@ -22,6 +22,7 @@ enum event_type {
     EVENT_OPEN = 2,
     EVENT_NET = 3,
     EVENT_SIGNAL = 4,
+    EVENT_OOM = 5,
 };
 
 struct exec_event {
@@ -64,10 +65,20 @@ struct signal_event {
     char comm[TASK_COMM_LEN];
 };
 
+struct oom_event {
+    u32 type; // EVENT_OOM
+    u32 trigger_pid;
+    u32 victim_pid;
+    char trigger_comm[TASK_COMM_LEN];
+    char victim_comm[TASK_COMM_LEN];
+    long unsigned int pages;
+};
+
 struct exec_event *unused_exec __attribute__((unused));
 struct open_event *unused_open __attribute__((unused));
 struct net_event *unused_net __attribute__((unused));
 struct signal_event *unused_signal __attribute__((unused));
+struct oom_event *unused_oom __attribute__((unused));
 struct net_event *unused_net __attribute__((unused));
 
 struct {
@@ -231,6 +242,36 @@ int trace_sys_kill(struct kill_args *ctx) {
     e->tpid = ctx->pid;
     e->sig = ctx->sig;
     bpf_get_current_comm(&e->comm, sizeof(e->comm));
+    
+    bpf_ringbuf_submit(e, 0);
+    return 0;
+}
+
+SEC("tracepoint/oom/mark_victim")
+int trace_oom_mark_victim(struct trace_event_raw_mark_victim *ctx) {
+    u32 trigger_pid = bpf_get_current_pid_tgid() >> 32;
+    u32 victim_pid = ctx->pid;
+    u32 key = 0;
+    u32 *target_pid = bpf_map_lookup_elem(&target_pid_map, &key);
+    
+    if (target_pid && *target_pid != 0 && *target_pid != trigger_pid && *target_pid != victim_pid) {
+        return 0; // only trace if trigger or victim matches filter
+    }
+
+    struct oom_event *e;
+    e = bpf_ringbuf_reserve(&events, sizeof(*e), 0);
+    if (!e)
+        return 0;
+
+    e->type = EVENT_OOM;
+    e->trigger_pid = trigger_pid;
+    e->victim_pid = victim_pid;
+    e->pages = ctx->total_vm;
+    bpf_get_current_comm(&e->trigger_comm, sizeof(e->trigger_comm));
+    
+    // The victim process name is stored dynamically at the end of the tracepoint struct
+    u16 offset = ctx->__data_loc_comm & 0xFFFF;
+    bpf_probe_read_kernel_str(&e->victim_comm, sizeof(e->victim_comm), (void *)ctx + offset);
     
     bpf_ringbuf_submit(e, 0);
     return 0;

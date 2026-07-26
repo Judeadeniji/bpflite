@@ -10,6 +10,7 @@ const (
 	TypeOpen   = 2
 	TypeNet    = 3
 	TypeSignal = 4
+	TypeOom    = 5
 )
 
 type EventHeader struct {
@@ -54,6 +55,15 @@ type SignalEvent struct {
 	Tpid uint32
 	Sig  int32
 	Comm [16]byte
+}
+
+type OomEvent struct {
+	Type        uint32
+	TriggerPid  uint32
+	VictimPid   uint32
+	TriggerComm [16]byte
+	VictimComm  [16]byte
+	Pages       uint64
 }
 
 func (e *ExecEvent) CommString() string {
@@ -183,4 +193,20 @@ func (e *NetEvent) HumanDescription() string {
 	}
 	
 	return fmt.Sprintf("Network activity with %s on %s (%s -> %s)", daddr, portLabel, e.OldStateString(), e.NewStateString())
+}
+
+func (e *OomEvent) TriggerCommString() string {
+	idx := bytes.IndexByte(e.TriggerComm[:], 0)
+	if idx < 0 {
+		return string(e.TriggerComm[:])
+	}
+	return string(e.TriggerComm[:idx])
+}
+
+func (e *OomEvent) VictimCommString() string {
+	idx := bytes.IndexByte(e.VictimComm[:], 0)
+	if idx < 0 {
+		return string(e.VictimComm[:])
+	}
+	return string(e.VictimComm[:idx])
 }
