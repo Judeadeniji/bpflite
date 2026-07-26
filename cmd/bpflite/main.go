@@ -48,7 +48,7 @@ func main() {
 		Use:   "exec",
 		Short: "Trace execve syscalls",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runTracer(true, false, false, false, false, 0)
+			return runTracer(true, false, false, false, false, false, false, false, false, false, 0)
 		},
 	}
 
@@ -56,7 +56,7 @@ func main() {
 		Use:   "open",
 		Short: "Trace openat syscalls",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runTracer(false, true, false, false, false, pidFilter)
+			return runTracer(false, true, false, false, false, false, false, false, false, false, pidFilter)
 		},
 	}
 
@@ -64,7 +64,7 @@ func main() {
 		Use:   "net",
 		Short: "Trace TCP connection lifecycle",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runTracer(false, false, true, false, false, pidFilter)
+			return runTracer(false, false, true, false, false, false, false, false, false, false, pidFilter)
 		},
 	}
 
@@ -72,7 +72,7 @@ func main() {
 		Use:   "signal",
 		Short: "Trace kill syscalls (signals)",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runTracer(false, false, false, true, false, pidFilter)
+			return runTracer(false, false, false, true, false, false, false, false, false, false, pidFilter)
 		},
 	}
 
@@ -80,7 +80,47 @@ func main() {
 		Use:   "oom",
 		Short: "Trace out-of-memory (OOM) kills",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runTracer(false, false, false, false, true, pidFilter)
+			return runTracer(false, false, false, false, true, false, false, false, false, false, pidFilter)
+		},
+	}
+
+	unlinkCmd := &cobra.Command{
+		Use:   "unlink",
+		Short: "Trace unlinkat (file deletion) syscalls",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runTracer(false, false, false, false, false, true, false, false, false, false, pidFilter)
+		},
+	}
+
+	mountCmd := &cobra.Command{
+		Use:   "mount",
+		Short: "Trace mount syscalls",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runTracer(false, false, false, false, false, false, true, false, false, false, pidFilter)
+		},
+	}
+
+	setuidCmd := &cobra.Command{
+		Use:   "setuid",
+		Short: "Trace setuid syscalls",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runTracer(false, false, false, false, false, false, false, true, false, false, pidFilter)
+		},
+	}
+
+	bpfCmd := &cobra.Command{
+		Use:   "bpf",
+		Short: "Trace bpf syscalls",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runTracer(false, false, false, false, false, false, false, false, true, false, pidFilter)
+		},
+	}
+
+	moduleCmd := &cobra.Command{
+		Use:   "module",
+		Short: "Trace kernel module loads",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runTracer(false, false, false, false, false, false, false, false, false, true, pidFilter)
 		},
 	}
 
@@ -88,19 +128,24 @@ func main() {
 	netCmd.Flags().Uint32Var(&pidFilter, "pid", 0, "Filter events by PID")
 	signalCmd.Flags().Uint32Var(&pidFilter, "pid", 0, "Filter events by PID")
 	oomCmd.Flags().Uint32Var(&pidFilter, "pid", 0, "Filter events by PID")
+	unlinkCmd.Flags().Uint32Var(&pidFilter, "pid", 0, "Filter events by PID")
+	mountCmd.Flags().Uint32Var(&pidFilter, "pid", 0, "Filter events by PID")
+	setuidCmd.Flags().Uint32Var(&pidFilter, "pid", 0, "Filter events by PID")
+	bpfCmd.Flags().Uint32Var(&pidFilter, "pid", 0, "Filter events by PID")
+	moduleCmd.Flags().Uint32Var(&pidFilter, "pid", 0, "Filter events by PID")
 
 	rootCmd.PersistentFlags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
 
 	allCmd := &cobra.Command{
 		Use:   "all",
-		Short: "Trace all events (exec, open, net, signal, oom) simultaneously",
+		Short: "Trace all events simultaneously",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runTracer(true, true, true, true, true, pidFilter)
+			return runTracer(true, true, true, true, true, true, true, true, true, true, pidFilter)
 		},
 	}
 	allCmd.Flags().Uint32Var(&pidFilter, "pid", 0, "Filter events by PID")
 
-	traceCmd.AddCommand(execCmd, openCmd, netCmd, signalCmd, oomCmd, allCmd)
+	traceCmd.AddCommand(execCmd, openCmd, netCmd, signalCmd, oomCmd, unlinkCmd, mountCmd, setuidCmd, bpfCmd, moduleCmd, allCmd)
 
 	recordCmd := &cobra.Command{
 		Use:   "record",
@@ -217,7 +262,7 @@ func runDaemon() error {
 	}
 	defer os.Remove(pidFile)
 
-	l, err := loader.New(true, true, true, true, true, 0)
+	l, err := loader.New(true, true, true, true, true, true, true, true, true, true, 0)
 	if err != nil {
 		slog.Error("failed to initialize loader", "error", err)
 		return err
@@ -277,6 +322,26 @@ func runDaemon() error {
 			case *event.OomEvent:
 				if err := database.InsertOom(ev); err != nil {
 					slog.Error("failed to insert oom event", "error", err)
+				}
+			case *event.UnlinkEvent:
+				if err := database.InsertUnlink(ev); err != nil {
+					slog.Error("failed to insert unlink event", "error", err)
+				}
+			case *event.MountEvent:
+				if err := database.InsertMount(ev); err != nil {
+					slog.Error("failed to insert mount event", "error", err)
+				}
+			case *event.SetuidEvent:
+				if err := database.InsertSetuid(ev); err != nil {
+					slog.Error("failed to insert setuid event", "error", err)
+				}
+			case *event.BpfEvent:
+				if err := database.InsertBpf(ev); err != nil {
+					slog.Error("failed to insert bpf event", "error", err)
+				}
+			case *event.ModuleEvent:
+				if err := database.InsertModule(ev); err != nil {
+					slog.Error("failed to insert module event", "error", err)
 				}
 			}
 		}
@@ -374,8 +439,8 @@ func runHistory(limit int, formatStr string) error {
 	return nil
 }
 
-func runTracer(traceExec, traceOpen, traceNet, traceSignal, traceOom bool, filterPID uint32) error {
-	l, err := loader.New(traceExec, traceOpen, traceNet, traceSignal, traceOom, filterPID)
+func runTracer(traceExec, traceOpen, traceNet, traceSignal, traceOom, traceUnlink, traceMount, traceSetuid, traceBpf, traceModule bool, filterPID uint32) error {
+	l, err := loader.New(traceExec, traceOpen, traceNet, traceSignal, traceOom, traceUnlink, traceMount, traceSetuid, traceBpf, traceModule, filterPID)
 	if err != nil {
 		return fmt.Errorf("failed to initialize loader: %w", err)
 	}

@@ -86,6 +86,49 @@ func (d *DB) initSchema() error {
 		victim_comm TEXT,
 		pages INTEGER
 	);
+
+	CREATE TABLE IF NOT EXISTS unlink_events (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+		pid INTEGER,
+		comm TEXT,
+		pathname TEXT
+	);
+
+	CREATE TABLE IF NOT EXISTS mount_events (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+		pid INTEGER,
+		comm TEXT,
+		dev_name TEXT,
+		dir_name TEXT,
+		fs_type TEXT,
+		flags INTEGER
+	);
+
+	CREATE TABLE IF NOT EXISTS setuid_events (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+		pid INTEGER,
+		comm TEXT,
+		uid INTEGER
+	);
+
+	CREATE TABLE IF NOT EXISTS bpf_events (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+		pid INTEGER,
+		comm TEXT,
+		cmd INTEGER
+	);
+
+	CREATE TABLE IF NOT EXISTS module_events (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+		pid INTEGER,
+		comm TEXT,
+		name TEXT
+	);
 	`
 	_, err := d.db.Exec(schema)
 	return err
@@ -114,6 +157,16 @@ func (d *DB) QueryHistory(limit int) ([]HistoryEvent, error) {
 	SELECT 'signal' as type, timestamp, pid, comm, 'sent SIG ' || sig || ' to PID ' || tpid as details FROM signal_events
 	UNION ALL
 	SELECT 'oom' as type, timestamp, trigger_pid as pid, trigger_comm as comm, 'killed ' || victim_comm || ' (PID ' || victim_pid || ') reclaiming ' || pages || ' pages' as details FROM oom_events
+	UNION ALL
+	SELECT 'unlink' as type, timestamp, pid, comm, 'deleted ' || pathname as details FROM unlink_events
+	UNION ALL
+	SELECT 'mount' as type, timestamp, pid, comm, 'mounted ' || dev_name || ' on ' || dir_name || ' (' || fs_type || ')' as details FROM mount_events
+	UNION ALL
+	SELECT 'setuid' as type, timestamp, pid, comm, 'setuid to uid ' || uid as details FROM setuid_events
+	UNION ALL
+	SELECT 'bpf' as type, timestamp, pid, comm, 'bpf syscall cmd: ' || cmd as details FROM bpf_events
+	UNION ALL
+	SELECT 'module' as type, timestamp, pid, comm, 'loaded module: ' || name as details FROM module_events
 	ORDER BY timestamp DESC
 	LIMIT ?
 	`

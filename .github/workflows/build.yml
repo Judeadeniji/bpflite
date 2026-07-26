@@ -20,5 +20,13 @@ jobs:
     - name: Install LLVM/Clang
       run: sudo apt-get update && sudo apt-get install -y clang llvm make
 
+    - name: Generate
+      run: make generate
+
+    - name: golangci-lint
+      uses: golangci/golangci-lint-action@v6
+      with:
+        version: v1.60
+
     - name: Build
-      run: make all
+      run: make build

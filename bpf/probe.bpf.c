@@ -26,3 +26,8 @@ struct {
 #include "trace_net.bpf.h"
 #include "trace_signal.bpf.h"
 #include "trace_oom.bpf.h"
+#include "trace_unlink.bpf.h"
+#include "trace_mount.bpf.h"
+#include "trace_setuid.bpf.h"
+#include "trace_bpf.bpf.h"
+#include "trace_module.bpf.h"

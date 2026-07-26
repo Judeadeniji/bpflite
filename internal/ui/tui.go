@@ -28,6 +28,11 @@ const (
 	ViewNet
 	ViewSignal
 	ViewOom
+	ViewUnlink
+	ViewMount
+	ViewSetuid
+	ViewBpf
+	ViewModule
 )
 
 type UIModel struct {
@@ -156,6 +161,14 @@ func (m *UIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.updateTable()
 		return m, nil
 
+	case *event.UnlinkEvent, *event.MountEvent, *event.SetuidEvent, *event.BpfEvent, *event.ModuleEvent:
+		m.events = append(m.events, msg)
+		if len(m.events) > 1000 {
+			m.events = m.events[1:]
+		}
+		m.updateTable()
+		return m, nil
+
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "ctrl+c", "q":
@@ -170,13 +183,25 @@ func (m *UIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "tab":
 			if !m.filtering {
-				m.viewMode = (m.viewMode + 1) % 6
+				m.viewMode = (m.viewMode + 1) % 11
 				m.updateTable()
 				return m, nil
 			}
-		case "1", "2", "3", "4", "5", "6":
+		case "1", "2", "3", "4", "5", "6", "7", "8", "9":
 			if !m.filtering {
 				m.viewMode = ViewMode(msg.String()[0] - '1')
+				m.updateTable()
+				return m, nil
+			}
+		case "0":
+			if !m.filtering {
+				m.viewMode = ViewMode(9)
+				m.updateTable()
+				return m, nil
+			}
+		case "-":
+			if !m.filtering {
+				m.viewMode = ViewMode(10)
 				m.updateTable()
 				return m, nil
 			}
@@ -253,6 +278,46 @@ func (m *UIModel) updateTable() {
 			ppidStr = "-"
 			commStr = e.TriggerCommString()
 			args = fmt.Sprintf("killed %s (PID %d) reclaiming %d pages", e.VictimCommString(), e.VictimPid, e.Pages)
+		case *event.UnlinkEvent:
+			if m.viewMode != ViewAll && m.viewMode != ViewUnlink {
+				continue
+			}
+			pidStr = fmt.Sprintf("%d", e.Pid)
+			ppidStr = "-"
+			commStr = e.Comm
+			args = fmt.Sprintf("deleted %s", e.Pathname)
+		case *event.MountEvent:
+			if m.viewMode != ViewAll && m.viewMode != ViewMount {
+				continue
+			}
+			pidStr = fmt.Sprintf("%d", e.Pid)
+			ppidStr = "-"
+			commStr = e.Comm
+			args = fmt.Sprintf("mounted %s on %s", e.DevName, e.DirName)
+		case *event.SetuidEvent:
+			if m.viewMode != ViewAll && m.viewMode != ViewSetuid {
+				continue
+			}
+			pidStr = fmt.Sprintf("%d", e.Pid)
+			ppidStr = "-"
+			commStr = e.Comm
+			args = fmt.Sprintf("setuid %d", e.Uid)
+		case *event.BpfEvent:
+			if m.viewMode != ViewAll && m.viewMode != ViewBpf {
+				continue
+			}
+			pidStr = fmt.Sprintf("%d", e.Pid)
+			ppidStr = "-"
+			commStr = e.Comm
+			args = fmt.Sprintf("cmd: %d", e.Cmd)
+		case *event.ModuleEvent:
+			if m.viewMode != ViewAll && m.viewMode != ViewModule {
+				continue
+			}
+			pidStr = fmt.Sprintf("%d", e.Pid)
+			ppidStr = "-"
+			commStr = e.Comm
+			args = fmt.Sprintf("loaded %s", e.Name)
 		}
 
 		if m.filterText != "" {
@@ -293,7 +358,7 @@ func (m *UIModel) View() string {
 	var content strings.Builder
 
 	// Render Tabs
-	tabNames := []string{"1:All", "2:Exec", "3:Open", "4:Net", "5:Signal", "6:Oom"}
+	tabNames := []string{"1:All", "2:Exec", "3:Open", "4:Net", "5:Sig", "6:Oom", "7:Unlink", "8:Mount", "9:Setuid", "0:Bpf", "-:Module"}
 	activeTabStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("229")).Background(lipgloss.Color("57")).Padding(0, 1)
 	inactiveTabStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("245")).Padding(0, 1)
 	var renderedTabs []string
@@ -336,6 +401,21 @@ func (m *UIModel) View() string {
 		case *event.OomEvent:
 			detailsText = lipgloss.NewStyle().Foreground(lipgloss.Color("196")).Bold(true).Render("OOM") + " " + e.TriggerCommString() + "\n\n" +
 				lipgloss.NewStyle().Foreground(lipgloss.Color("252")).Render(fmt.Sprintf("Process %s (PID %d) was killed due to Out-Of-Memory, reclaiming %d pages", e.VictimCommString(), e.VictimPid, e.Pages))
+		case *event.UnlinkEvent:
+			detailsText = lipgloss.NewStyle().Foreground(lipgloss.Color("204")).Bold(true).Render("UNLINK") + " " + e.Comm + "\n\n" +
+				lipgloss.NewStyle().Foreground(lipgloss.Color("252")).Render(fmt.Sprintf("Process deleted file: %s", e.Pathname))
+		case *event.MountEvent:
+			detailsText = lipgloss.NewStyle().Foreground(lipgloss.Color("226")).Bold(true).Render("MOUNT") + " " + e.Comm + "\n\n" +
+				lipgloss.NewStyle().Foreground(lipgloss.Color("252")).Render(fmt.Sprintf("Mounted %s on %s (fs: %s)", e.DevName, e.DirName, e.FsType))
+		case *event.SetuidEvent:
+			detailsText = lipgloss.NewStyle().Foreground(lipgloss.Color("160")).Bold(true).Render("SETUID") + " " + e.Comm + "\n\n" +
+				lipgloss.NewStyle().Foreground(lipgloss.Color("252")).Render(fmt.Sprintf("Changed uid to %d", e.Uid))
+		case *event.BpfEvent:
+			detailsText = lipgloss.NewStyle().Foreground(lipgloss.Color("27")).Bold(true).Render("BPF") + " " + e.Comm + "\n\n" +
+				lipgloss.NewStyle().Foreground(lipgloss.Color("252")).Render(fmt.Sprintf("Performed bpf syscall cmd: %d", e.Cmd))
+		case *event.ModuleEvent:
+			detailsText = lipgloss.NewStyle().Foreground(lipgloss.Color("130")).Bold(true).Render("MODULE") + " " + e.Comm + "\n\n" +
+				lipgloss.NewStyle().Foreground(lipgloss.Color("252")).Render(fmt.Sprintf("Loaded kernel module: %s", e.Name))
 		}
 	} else {
 		detailsText = lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("No event selected")
