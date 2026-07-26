@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -44,6 +45,15 @@ const (
 	ViewModule
 )
 
+type item struct {
+	title, desc string
+	mode        ViewMode
+}
+
+func (i item) Title() string       { return i.title }
+func (i item) Description() string { return i.desc }
+func (i item) FilterValue() string { return i.title }
+
 type UIModel struct {
 	table          table.Model
 	textInput      textinput.Model
@@ -55,6 +65,9 @@ type UIModel struct {
 	width          int
 	height         int
 	dirty          bool
+
+	palette     list.Model
+	paletteOpen bool
 }
 
 func NewUIModel() *UIModel {
@@ -89,9 +102,28 @@ func NewUIModel() *UIModel {
 	ti.CharLimit = 50
 	ti.Width = 30
 
+	items := []list.Item{
+		item{title: "All", desc: "View all events simultaneously", mode: ViewAll},
+		item{title: "Exec", desc: "Process executions (sys_enter_execve)", mode: ViewExec},
+		item{title: "Open", desc: "File openings (sys_enter_openat)", mode: ViewOpen},
+		item{title: "Net", desc: "TCP connection state changes", mode: ViewNet},
+		item{title: "Signal", desc: "Signals sent (sys_enter_kill)", mode: ViewSignal},
+		item{title: "OOM", desc: "Out-of-memory kills (mark_victim)", mode: ViewOom},
+		item{title: "Unlink", desc: "File deletions (sys_enter_unlinkat)", mode: ViewUnlink},
+		item{title: "Mount", desc: "Filesystem mounts (sys_enter_mount)", mode: ViewMount},
+		item{title: "Setuid", desc: "Privilege escalations (sys_enter_setuid)", mode: ViewSetuid},
+		item{title: "Bpf", desc: "BPF program loading (sys_enter_bpf)", mode: ViewBpf},
+		item{title: "Module", desc: "Kernel module loading (init/finit_module)", mode: ViewModule},
+	}
+	pal := list.New(items, list.NewDefaultDelegate(), 40, 20)
+	pal.Title = "Switch Tracer"
+	pal.SetShowHelp(false)
+	pal.SetShowStatusBar(false)
+
 	return &UIModel{
 		table:          t,
 		textInput:      ti,
+		palette:        pal,
 		events:         make([]interface{}, 0),
 		filteredEvents: make([]interface{}, 0),
 		viewMode:       ViewAll,
@@ -128,6 +160,9 @@ func (m *UIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			{Title: "COMM", Width: 15},
 			{Title: "ARGS", Width: argsW},
 		})
+
+		m.palette.SetWidth(msg.Width - 4)
+		m.palette.SetHeight(msg.Height - 4)
 
 		return m, nil
 
@@ -189,40 +224,39 @@ func (m *UIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "ctrl+c", "q":
-			if !m.filtering {
+			if !m.filtering && !m.paletteOpen {
 				return m, tea.Quit
 			}
-		case "f", "/":
+		case "ctrl+p":
 			if !m.filtering {
+				m.paletteOpen = !m.paletteOpen
+				if m.paletteOpen {
+					m.palette.ResetFilter()
+				}
+				return m, nil
+			}
+		case "f", "/":
+			if !m.filtering && !m.paletteOpen {
 				m.filtering = true
 				m.textInput.Focus()
 				return m, textinput.Blink
 			}
-		case "tab":
-			if !m.filtering {
-				m.viewMode = (m.viewMode + 1) % 11
+		case "enter":
+			if m.filtering {
+				m.filtering = false
+				m.textInput.Blur()
+				m.filterText = m.textInput.Value()
 				m.updateTable()
 				return m, nil
-			}
-		case "1", "2", "3", "4", "5", "6", "7", "8", "9":
-			if !m.filtering {
-				m.viewMode = ViewMode(msg.String()[0] - '1')
-				m.updateTable()
+			} else if m.paletteOpen {
+				if i, ok := m.palette.SelectedItem().(item); ok {
+					m.viewMode = i.mode
+					m.paletteOpen = false
+					m.updateTable()
+				}
 				return m, nil
 			}
-		case "0":
-			if !m.filtering {
-				m.viewMode = ViewMode(9)
-				m.updateTable()
-				return m, nil
-			}
-		case "-":
-			if !m.filtering {
-				m.viewMode = ViewMode(10)
-				m.updateTable()
-				return m, nil
-			}
-		case "enter", "esc":
+		case "esc":
 			if m.filtering {
 				m.filtering = false
 				m.textInput.Blur()
@@ -230,10 +264,17 @@ func (m *UIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.updateTable()
 				return m, nil
 			}
+			if m.paletteOpen {
+				m.paletteOpen = false
+				return m, nil
+			}
 		}
 	}
 
-	if m.filtering {
+	if m.paletteOpen {
+		m.palette, cmd = m.palette.Update(msg)
+		cmds = append(cmds, cmd)
+	} else if m.filtering {
 		m.textInput, cmd = m.textInput.Update(msg)
 		cmds = append(cmds, cmd)
 		m.filterText = m.textInput.Value()
@@ -374,19 +415,39 @@ func (m *UIModel) View() string {
 	// We'll render the table and the footer inside this box.
 	var content strings.Builder
 
-	// Render Tabs
-	tabNames := []string{"1:All", "2:Exec", "3:Open", "4:Net", "5:Sig", "6:Oom", "7:Unlink", "8:Mount", "9:Setuid", "0:Bpf", "-:Module"}
-	activeTabStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("229")).Background(lipgloss.Color("57")).Padding(0, 1)
-	inactiveTabStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("245")).Padding(0, 1)
-	var renderedTabs []string
-	for i, name := range tabNames {
-		if ViewMode(i) == m.viewMode {
-			renderedTabs = append(renderedTabs, activeTabStyle.Render(name))
-		} else {
-			renderedTabs = append(renderedTabs, inactiveTabStyle.Render(name))
-		}
+	if m.paletteOpen {
+		content.WriteString(m.palette.View())
+		b.WriteString(boxStyle.Render(content.String()))
+		return b.String()
 	}
-	content.WriteString(lipgloss.JoinHorizontal(lipgloss.Top, renderedTabs...))
+
+	// Render Header Title (Current View)
+	viewTitle := "ALL EVENTS"
+	switch m.viewMode {
+	case ViewExec:
+		viewTitle = "EXEC"
+	case ViewOpen:
+		viewTitle = "OPEN"
+	case ViewNet:
+		viewTitle = "NET"
+	case ViewSignal:
+		viewTitle = "SIGNAL"
+	case ViewOom:
+		viewTitle = "OOM"
+	case ViewUnlink:
+		viewTitle = "UNLINK"
+	case ViewMount:
+		viewTitle = "MOUNT"
+	case ViewSetuid:
+		viewTitle = "SETUID"
+	case ViewBpf:
+		viewTitle = "BPF"
+	case ViewModule:
+		viewTitle = "MODULE"
+	}
+	
+	headerStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("229")).Background(lipgloss.Color("57")).Padding(0, 2).Bold(true)
+	content.WriteString(headerStyle.Render(fmt.Sprintf("◀  %s  ▶", viewTitle)))
 	content.WriteString("\n\n")
 
 	content.WriteString(m.table.View())
@@ -445,7 +506,7 @@ func (m *UIModel) View() string {
 		content.WriteString(m.textInput.View())
 		content.WriteString("\n")
 	} else {
-		content.WriteString(helpStyle.Render(" ↑/k up • ↓/j down • Tab switch mode • / filter • q quit"))
+		content.WriteString(helpStyle.Render(" ↑/k up • ↓/j down • Ctrl+P switch tracer • / filter • q quit"))
 		content.WriteString("\n")
 	}
 
