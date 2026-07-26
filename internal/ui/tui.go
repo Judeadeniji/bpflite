@@ -31,10 +31,10 @@ func overlayModal(modal, bg string, width, height int) string {
 	bgLayer := lipgloss.NewLayer(bg)
 	modalLayer := lipgloss.NewLayer(modal).X(px).Y(py).Z(1)
 
-	return lipgloss.NewCanvas(width, height).
-		Compose(bgLayer).
-		Compose(modalLayer).
-		Render()
+	comp := lipgloss.NewCompositor(bgLayer, modalLayer)
+	canvas := lipgloss.NewCanvas(width, height)
+	comp.Draw(canvas, canvas.Bounds())
+	return canvas.Render()
 }
 
 type tickMsg time.Time
