@@ -5,11 +5,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/list"
-	"github.com/charmbracelet/bubbles/table"
-	"github.com/charmbracelet/bubbles/textinput"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/list"
+	"charm.land/bubbles/v2/table"
+	"charm.land/bubbles/v2/textinput"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"bpflite/internal/event"
@@ -150,7 +150,7 @@ func NewUIModel() *UIModel {
 	ti := textinput.New()
 	ti.Placeholder = "Filter by COMM or PID..."
 	ti.CharLimit = 50
-	ti.Width = 30
+	ti.SetWidth(30)
 
 	items := []list.Item{
 		item{title: "All", desc: "View all events simultaneously", mode: ViewAll},
@@ -285,7 +285,7 @@ func (m *UIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.dirty = true
 		return m, nil
 
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		switch msg.String() {
 		case "ctrl+c", "q":
 			if !m.filtering && !m.paletteOpen {
@@ -303,7 +303,7 @@ func (m *UIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if !m.filtering && !m.paletteOpen {
 				m.filtering = true
 				m.textInput.Focus()
-				return m, textinput.Blink
+				return m, nil
 			}
 		case "enter":
 			if m.filtering {
@@ -566,20 +566,20 @@ func (m *UIModel) renderBackground() string {
 	return b.String()
 }
 
-func (m *UIModel) View() string {
+func (m *UIModel) View() tea.View {
 	if m.paletteOpen {
 		// Render the full background first so events stay visible behind the modal.
 		bgStr := m.renderBackground()
 
-		paletteView := lipgloss.NewStyle().
+		paletteStr := lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(lipgloss.Color("87")).
 			Background(lipgloss.Color("235")).
 			Padding(1, 2).
 			Render(m.palette.View())
 
-		pw := lipgloss.Width(paletteView)
-		ph := lipgloss.Height(paletteView)
+		pw := lipgloss.Width(paletteStr)
+		ph := lipgloss.Height(paletteStr)
 		px := (m.width - pw) / 2
 		py := (m.height - ph) / 2
 		if px < 0 {
@@ -589,7 +589,7 @@ func (m *UIModel) View() string {
 			py = 0
 		}
 
-		return placeOverlay(px, py, paletteView, bgStr)
+		return tea.NewView(placeOverlay(px, py, paletteStr, bgStr))
 	}
 
 	bg := m.renderBackground()
@@ -600,9 +600,8 @@ func (m *UIModel) View() string {
 		if len(lines) > 1 {
 			lines[len(lines)-2] = " " + m.textInput.View()
 		}
-		return strings.Join(lines, "\n")
+		return tea.NewView(strings.Join(lines, "\n"))
 	}
 
-	return bg
+	return tea.NewView(bg)
 }
-
