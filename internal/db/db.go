@@ -5,11 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	_ "modernc.org/sqlite"
-
-	"bpflite/internal/event"
 )
 
 type DB struct {
@@ -91,58 +88,6 @@ func (d *DB) initSchema() error {
 	);
 	`
 	_, err := d.db.Exec(schema)
-	return err
-}
-
-func (d *DB) InsertExec(e *event.ExecEvent) error {
-	args := []string{}
-	for _, arg := range e.Argv {
-		idx := strings.IndexByte(string(arg[:]), 0)
-		if idx <= 0 {
-			continue
-		}
-		args = append(args, string(arg[:idx]))
-	}
-
-	_, err := d.db.Exec(
-		"INSERT INTO exec_events (pid, ppid, uid, comm, args) VALUES (?, ?, ?, ?, ?)",
-		e.Pid, e.Ppid, e.Uid, e.CommString(), strings.Join(args, " "),
-	)
-	return err
-}
-
-func (d *DB) InsertOpen(e *event.OpenEvent) error {
-	_, err := d.db.Exec(
-		"INSERT INTO open_events (pid, comm, filename) VALUES (?, ?, ?)",
-		e.Pid, e.CommString(), e.FilenameString(),
-	)
-	return err
-}
-
-func (d *DB) InsertNet(e *event.NetEvent) error {
-	saddr := fmt.Sprintf("%d.%d.%d.%d", e.Saddr[0], e.Saddr[1], e.Saddr[2], e.Saddr[3])
-	daddr := fmt.Sprintf("%d.%d.%d.%d", e.Daddr[0], e.Daddr[1], e.Daddr[2], e.Daddr[3])
-
-	_, err := d.db.Exec(
-		"INSERT INTO net_events (pid, comm, saddr, sport, daddr, dport, old_state, new_state) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-		e.Pid, e.CommString(), saddr, e.Sport, daddr, e.Dport, e.OldStateString(), e.NewStateString(),
-	)
-	return err
-}
-
-func (d *DB) InsertSignal(e *event.SignalEvent) error {
-	_, err := d.db.Exec(
-		"INSERT INTO signal_events (pid, tpid, sig, comm) VALUES (?, ?, ?, ?)",
-		e.Pid, e.Tpid, e.Sig, e.CommString(),
-	)
-	return err
-}
-
-func (d *DB) InsertOom(e *event.OomEvent) error {
-	_, err := d.db.Exec(
-		"INSERT INTO oom_events (trigger_pid, victim_pid, trigger_comm, victim_comm, pages) VALUES (?, ?, ?, ?, ?)",
-		e.TriggerPid, e.VictimPid, e.TriggerCommString(), e.VictimCommString(), e.Pages,
-	)
 	return err
 }
 

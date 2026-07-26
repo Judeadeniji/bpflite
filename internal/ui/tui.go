@@ -285,7 +285,7 @@ func (m *UIModel) updateTable() {
 func (m *UIModel) View() string {
 	var b strings.Builder
 
-	boxStyle := baseStyle.Copy().
+	boxStyle := baseStyle.
 		Width(m.width - 2).
 		Height(m.height - 2)
 

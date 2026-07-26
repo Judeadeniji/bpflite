@@ -105,7 +105,9 @@ func main() {
 		Short: "Record all events to SQLite database",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if daemonize {
-				os.MkdirAll("data", 0755)
+				if err := os.MkdirAll("data", 0755); err != nil {
+					fmt.Fprintf(os.Stderr, "failed to create data dir: %v\n", err)
+				}
 				logFile, err := os.OpenFile("data/bpflite.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 				if err != nil {
 					return err
@@ -142,8 +144,10 @@ func main() {
 			}
 			pidStr := strings.TrimSpace(string(b))
 			var pid int
-			fmt.Sscanf(pidStr, "%d", &pid)
-
+			if _, err := fmt.Sscanf(pidStr, "%d", &pid); err != nil {
+				fmt.Fprintf(os.Stderr, "failed to parse pid file: %v\n", err)
+				return err
+			}
 			process, err := os.FindProcess(pid)
 			if err != nil {
 				return err
@@ -188,10 +192,14 @@ func main() {
 }
 
 func runDaemon() error {
-	os.MkdirAll("data", 0755)
+	if err := os.MkdirAll("data", 0755); err != nil {
+		fmt.Fprintf(os.Stderr, "failed to create data dir for pid file: %v\n", err)
+	}
 
 	pidFile := "data/bpflite.pid"
-	os.WriteFile(pidFile, fmt.Appendf(nil, "%d\n", os.Getpid()), 0644)
+	if err := os.WriteFile(pidFile, fmt.Appendf(nil, "%d\n", os.Getpid()), 0644); err != nil {
+		fmt.Fprintf(os.Stderr, "failed to write pid file: %v\n", err)
+	}
 	defer os.Remove(pidFile)
 
 	l, err := loader.New(true, true, true, true, true, 0)
@@ -234,15 +242,25 @@ func runDaemon() error {
 		case e := <-events:
 			switch ev := e.(type) {
 			case *event.ExecEvent:
-				database.InsertExec(ev)
+				if err := database.InsertExec(ev); err != nil {
+					fmt.Fprintf(os.Stderr, "failed to insert exec event: %v\n", err)
+				}
 			case *event.OpenEvent:
-				database.InsertOpen(ev)
+				if err := database.InsertOpen(ev); err != nil {
+					fmt.Fprintf(os.Stderr, "failed to insert open event: %v\n", err)
+				}
 			case *event.NetEvent:
-				database.InsertNet(ev)
+				if err := database.InsertNet(ev); err != nil {
+					fmt.Fprintf(os.Stderr, "failed to insert net event: %v\n", err)
+				}
 			case *event.SignalEvent:
-				database.InsertSignal(ev)
+				if err := database.InsertSignal(ev); err != nil {
+					fmt.Fprintf(os.Stderr, "failed to insert signal event: %v\n", err)
+				}
 			case *event.OomEvent:
-				database.InsertOom(ev)
+				if err := database.InsertOom(ev); err != nil {
+					fmt.Fprintf(os.Stderr, "failed to insert oom event: %v\n", err)
+				}
 			}
 		}
 	}
