@@ -316,11 +316,21 @@ func (m *UIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.filtering {
 				m.filtering = false
 				m.textInput.Blur()
-				m.filterText = m.textInput.Value()
+				m.filterText = ""
+				m.textInput.SetValue("")
+				m.updateTable()
+				return m, nil
+			} else if m.filterText != "" && !m.paletteOpen {
+				m.filterText = ""
+				m.textInput.SetValue("")
 				m.updateTable()
 				return m, nil
 			}
 			if m.paletteOpen {
+				if m.palette.FilterState() == list.Filtering {
+					// Let bubbles/list handle esc to cancel the filter
+					break
+				}
 				m.paletteOpen = false
 				return m, nil
 			}
