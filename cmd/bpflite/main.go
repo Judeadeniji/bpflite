@@ -46,7 +46,7 @@ func main() {
 		Use:   "exec",
 		Short: "Trace execve syscalls",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runTracer(true, false, false, false, 0)
+			return runTracer(true, false, false, false, false, 0)
 		},
 	}
 
@@ -54,7 +54,7 @@ func main() {
 		Use:   "open",
 		Short: "Trace openat syscalls",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runTracer(false, true, false, false, pidFilter)
+			return runTracer(false, true, false, false, false, pidFilter)
 		},
 	}
 
@@ -62,7 +62,7 @@ func main() {
 		Use:   "net",
 		Short: "Trace TCP connection lifecycle",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runTracer(false, false, true, false, pidFilter)
+			return runTracer(false, false, true, false, false, pidFilter)
 		},
 	}
 
@@ -70,26 +70,35 @@ func main() {
 		Use:   "signal",
 		Short: "Trace kill syscalls (signals)",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runTracer(false, false, false, true, pidFilter)
+			return runTracer(false, false, false, true, false, pidFilter)
+		},
+	}
+
+	oomCmd := &cobra.Command{
+		Use:   "oom",
+		Short: "Trace out-of-memory (OOM) kills",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runTracer(false, false, false, false, true, pidFilter)
 		},
 	}
 
 	openCmd.Flags().Uint32Var(&pidFilter, "pid", 0, "Filter events by PID")
 	netCmd.Flags().Uint32Var(&pidFilter, "pid", 0, "Filter events by PID")
 	signalCmd.Flags().Uint32Var(&pidFilter, "pid", 0, "Filter events by PID")
+	oomCmd.Flags().Uint32Var(&pidFilter, "pid", 0, "Filter events by PID")
 
 	rootCmd.PersistentFlags().BoolVar(&jsonOutput, "json", false, "Output in JSON format")
 
 	allCmd := &cobra.Command{
 		Use:   "all",
-		Short: "Trace all events (exec, open, net, signal) simultaneously",
+		Short: "Trace all events (exec, open, net, signal, oom) simultaneously",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runTracer(true, true, true, true, pidFilter)
+			return runTracer(true, true, true, true, true, pidFilter)
 		},
 	}
 	allCmd.Flags().Uint32Var(&pidFilter, "pid", 0, "Filter events by PID")
 
-	traceCmd.AddCommand(execCmd, openCmd, netCmd, signalCmd, allCmd)
+	traceCmd.AddCommand(execCmd, openCmd, netCmd, signalCmd, oomCmd, allCmd)
 
 	recordCmd := &cobra.Command{
 		Use:   "record",
@@ -185,7 +194,7 @@ func runDaemon() error {
 	os.WriteFile(pidFile, fmt.Appendf(nil, "%d\n", os.Getpid()), 0644)
 	defer os.Remove(pidFile)
 
-	l, err := loader.New(true, true, true, true, 0)
+	l, err := loader.New(true, true, true, true, true, 0)
 	if err != nil {
 		return fmt.Errorf("failed to initialize loader: %w", err)
 	}
@@ -232,6 +241,8 @@ func runDaemon() error {
 				database.InsertNet(ev)
 			case *event.SignalEvent:
 				database.InsertSignal(ev)
+			case *event.OomEvent:
+				database.InsertOom(ev)
 			}
 		}
 	}
@@ -287,6 +298,7 @@ func runHistory(limit int, formatStr string) error {
 	openStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("119")).Bold(true)
 	netStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("213")).Bold(true)
 	signalStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("202")).Bold(true)
+	oomStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("196")).Bold(true).Background(lipgloss.Color("232"))
 	pidStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 	commStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
 
@@ -306,6 +318,8 @@ func runHistory(limit int, formatStr string) error {
 			typeStr = netStyle.Render(fmt.Sprintf("%-6s", typeStr))
 		case "signal":
 			typeStr = signalStyle.Render(fmt.Sprintf("%-6s", typeStr))
+		case "oom":
+			typeStr = oomStyle.Render(fmt.Sprintf("%-6s", typeStr))
 		default:
 			typeStr = fmt.Sprintf("%-6s", typeStr)
 		}
@@ -325,8 +339,8 @@ func runHistory(limit int, formatStr string) error {
 	return nil
 }
 
-func runTracer(traceExec, traceOpen, traceNet, traceSignal bool, filterPID uint32) error {
-	l, err := loader.New(traceExec, traceOpen, traceNet, traceSignal, filterPID)
+func runTracer(traceExec, traceOpen, traceNet, traceSignal, traceOom bool, filterPID uint32) error {
+	l, err := loader.New(traceExec, traceOpen, traceNet, traceSignal, traceOom, filterPID)
 	if err != nil {
 		return fmt.Errorf("failed to initialize loader: %w", err)
 	}

@@ -79,6 +79,16 @@ func (d *DB) initSchema() error {
 		sig INTEGER,
 		comm TEXT
 	);
+
+	CREATE TABLE IF NOT EXISTS oom_events (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+		trigger_pid INTEGER,
+		victim_pid INTEGER,
+		trigger_comm TEXT,
+		victim_comm TEXT,
+		pages INTEGER
+	);
 	`
 	_, err := d.db.Exec(schema)
 	return err
@@ -128,6 +138,14 @@ func (d *DB) InsertSignal(e *event.SignalEvent) error {
 	return err
 }
 
+func (d *DB) InsertOom(e *event.OomEvent) error {
+	_, err := d.db.Exec(
+		"INSERT INTO oom_events (trigger_pid, victim_pid, trigger_comm, victim_comm, pages) VALUES (?, ?, ?, ?, ?)",
+		e.TriggerPid, e.VictimPid, e.TriggerCommString(), e.VictimCommString(), e.Pages,
+	)
+	return err
+}
+
 func (d *DB) Close() error {
 	return d.db.Close()
 }
@@ -149,6 +167,8 @@ func (d *DB) QueryHistory(limit int) ([]HistoryEvent, error) {
 	SELECT 'net' as type, timestamp, pid, comm, saddr || ':' || sport || ' -> ' || daddr || ':' || dport || ' (' || old_state || ' -> ' || new_state || ')' as details FROM net_events
 	UNION ALL
 	SELECT 'signal' as type, timestamp, pid, comm, 'sent SIG ' || sig || ' to PID ' || tpid as details FROM signal_events
+	UNION ALL
+	SELECT 'oom' as type, timestamp, trigger_pid as pid, trigger_comm as comm, 'killed ' || victim_comm || ' (PID ' || victim_pid || ') reclaiming ' || pages || ' pages' as details FROM oom_events
 	ORDER BY timestamp DESC
 	LIMIT ?
 	`
