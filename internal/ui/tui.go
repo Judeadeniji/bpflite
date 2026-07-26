@@ -489,14 +489,14 @@ func (m *UIModel) renderBackground() string {
 		sideW = infoW
 	}
 	
-	left := bgStyle.Copy().
+	left := bgStyle.
 		Foreground(lipgloss.Color("229")).
 		Bold(true).
 		Width(sideW).
 		Align(lipgloss.Left).
 		Render(logoText)
 		
-	right := bgStyle.Copy().
+	right := bgStyle.
 		Foreground(lipgloss.Color("229")).
 		Width(sideW).
 		Align(lipgloss.Right).
@@ -505,7 +505,7 @@ func (m *UIModel) renderBackground() string {
 	centerW := m.width - (sideW * 2)
 	center := ""
 	if centerW > 0 {
-		center = bgStyle.Copy().
+		center = bgStyle.
 			Foreground(lipgloss.Color("255")).
 			Bold(true).
 			Width(centerW).
