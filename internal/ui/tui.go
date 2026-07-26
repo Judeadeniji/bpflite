@@ -144,6 +144,18 @@ func NewUIModel() *UIModel {
 	pal.SetShowHelp(false)
 	pal.SetShowStatusBar(false)
 
+	// Ensure the filter text input inherits the modal's background to prevent black spots
+	bg := lipgloss.Color("235")
+	pal.Styles.Filter.Focused.Text = pal.Styles.Filter.Focused.Text.Background(bg)
+	pal.Styles.Filter.Focused.Prompt = pal.Styles.Filter.Focused.Prompt.Background(bg)
+	pal.Styles.Filter.Focused.Placeholder = pal.Styles.Filter.Focused.Placeholder.Background(bg)
+	pal.Styles.Filter.Focused.Suggestion = pal.Styles.Filter.Focused.Suggestion.Background(bg)
+	
+	pal.Styles.Filter.Blurred.Text = pal.Styles.Filter.Blurred.Text.Background(bg)
+	pal.Styles.Filter.Blurred.Prompt = pal.Styles.Filter.Blurred.Prompt.Background(bg)
+	pal.Styles.Filter.Blurred.Placeholder = pal.Styles.Filter.Blurred.Placeholder.Background(bg)
+	pal.Styles.Filter.Blurred.Suggestion = pal.Styles.Filter.Blurred.Suggestion.Background(bg)
+
 	return &UIModel{
 		table:          t,
 		textInput:      ti,
@@ -270,7 +282,7 @@ func (m *UIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.paletteOpen = !m.paletteOpen
 				if m.paletteOpen {
 					m.palette.ResetFilter()
-					m.palette.SetFilterState(list.Filtering)
+					m.palette, _ = m.palette.Update(tea.KeyPressMsg{Text: "/", Code: rune('/')})
 				}
 				return m, nil
 			}
@@ -278,7 +290,7 @@ func (m *UIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if !m.filtering && !m.paletteOpen {
 				m.paletteOpen = true
 				m.palette.ResetFilter()
-				m.palette.SetFilterState(list.Filtering)
+				m.palette, _ = m.palette.Update(tea.KeyPressMsg{Text: "/", Code: rune('/')})
 				return m, nil
 			}
 		case "f", "/":
