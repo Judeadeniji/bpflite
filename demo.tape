@@ -3,13 +3,13 @@ Output demo.gif
 
 # Set up the terminal appearance
 Set FontSize 16
-Set Width 1200
-Set Height 600
+Set Width 1366
+Set Height 768
 Set Theme "Catppuccin Mocha"
 Set WindowBar Rings
 
 # Start the tool
-Type "sudo bin/bpflite trace all"
+Type "bin/bpflite trace all"
 Enter
 Sleep 4s
 
@@ -45,7 +45,7 @@ Sleep 2s
 # Switch to Net tracer using fuzzy find in the modal
 Type "s"
 Sleep 1s
-Type "net"
+Type "/net"
 Sleep 1s
 Enter
 Sleep 4s

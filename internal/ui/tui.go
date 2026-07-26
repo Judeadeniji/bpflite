@@ -282,7 +282,6 @@ func (m *UIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.paletteOpen = !m.paletteOpen
 				if m.paletteOpen {
 					m.palette.ResetFilter()
-					m.palette, _ = m.palette.Update(tea.KeyPressMsg{Text: "/", Code: rune('/')})
 				}
 				return m, nil
 			}
@@ -290,7 +289,6 @@ func (m *UIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if !m.filtering && !m.paletteOpen {
 				m.paletteOpen = true
 				m.palette.ResetFilter()
-				m.palette, _ = m.palette.Update(tea.KeyPressMsg{Text: "/", Code: rune('/')})
 				return m, nil
 			}
 		case "f", "/":
