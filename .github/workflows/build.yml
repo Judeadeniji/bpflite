@@ -23,10 +23,10 @@ jobs:
     - name: Generate
       run: make generate
 
-    - name: golangci-lint
-      uses: golangci/golangci-lint-action@v6
-      with:
-        version: latest
+    - name: Run golangci-lint
+      run: |
+        go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+        $(go env GOPATH)/bin/golangci-lint run
 
     - name: Build
       run: make build
