@@ -10,6 +10,7 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"bpflite/internal/event"
 )
@@ -476,46 +477,39 @@ func (m *UIModel) renderBackground() string {
 		viewTitle = "MODULE"
 	}
 
-	bgStyle := lipgloss.NewStyle().Background(lipgloss.Color("57"))
-	
-	logoText := " 🐝 bpflite"
-	infoText := "s: switch  /: filter  q: quit "
-	titleText := viewTitle
+	logoStr := lipgloss.NewStyle().Foreground(lipgloss.Color("212")).Bold(true).Render(" 🐝 bpflite")
+	titleStr := lipgloss.NewStyle().Foreground(lipgloss.Color("229")).Bold(true).Render(viewTitle)
+	infoStr := lipgloss.NewStyle().Foreground(lipgloss.Color("240")).Render("s: switch  /: filter  q: quit ")
 
-	logoW := lipgloss.Width(logoText)
-	infoW := lipgloss.Width(infoText)
-	sideW := logoW
-	if infoW > sideW {
-		sideW = infoW
-	}
-	
-	left := bgStyle.
-		Foreground(lipgloss.Color("229")).
-		Bold(true).
-		Width(sideW).
-		Align(lipgloss.Left).
-		Render(logoText)
-		
-	right := bgStyle.
-		Foreground(lipgloss.Color("229")).
-		Width(sideW).
-		Align(lipgloss.Right).
-		Render(infoText)
-		
-	centerW := m.width - (sideW * 2)
-	center := ""
-	if centerW > 0 {
-		center = bgStyle.
-			Foreground(lipgloss.Color("255")).
-			Bold(true).
-			Width(centerW).
-			Align(lipgloss.Center).
-			Render(titleText)
+	logoW := lipgloss.Width(logoStr)
+	infoW := lipgloss.Width(infoStr)
+	titleW := lipgloss.Width(titleStr)
+
+	var fullHeader string
+	if m.width >= logoW+titleW+infoW+4 {
+		leftPad := (m.width - titleW) / 2
+		rightPad := m.width - titleW - leftPad
+
+		if leftPad < logoW+1 {
+			leftPad = logoW + 1
+			rightPad = m.width - titleW - leftPad
+		}
+		if rightPad < infoW+1 {
+			rightPad = infoW + 1
+			leftPad = m.width - titleW - rightPad
+		}
+
+		leftSection := logoStr + strings.Repeat(" ", leftPad-logoW)
+		rightSection := strings.Repeat(" ", rightPad-infoW) + infoStr
+		fullHeader = leftSection + titleStr + rightSection
+	} else {
+		fullHeader = logoStr + "  " + titleStr + "  " + infoStr
+		fullHeader = ansi.Truncate(fullHeader, m.width, "")
 	}
 
-	fullHeader := lipgloss.JoinHorizontal(lipgloss.Top, left, center, right)
+	lineStr := lipgloss.NewStyle().Foreground(lipgloss.Color("236")).Render(strings.Repeat("─", m.width))
 
-	content.WriteString(fullHeader)
+	content.WriteString(fullHeader + "\n" + lineStr)
 	content.WriteString("\n\n")
 
 	content.WriteString(m.table.View())
