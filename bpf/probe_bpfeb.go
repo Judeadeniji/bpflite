@@ -20,14 +20,25 @@ const (
 	ProbeMapTargetPidMap           = "target_pid_map"
 	ProbeProgTraceInetSockSetState = "trace_inet_sock_set_state"
 	ProbeProgTraceOomMarkVictim    = "trace_oom_mark_victim"
+	ProbeProgTraceSysBpf           = "trace_sys_bpf"
 	ProbeProgTraceSysExecve        = "trace_sys_execve"
+	ProbeProgTraceSysFinitModule   = "trace_sys_finit_module"
+	ProbeProgTraceSysInitModule    = "trace_sys_init_module"
 	ProbeProgTraceSysKill          = "trace_sys_kill"
+	ProbeProgTraceSysMount         = "trace_sys_mount"
 	ProbeProgTraceSysOpenat        = "trace_sys_openat"
+	ProbeProgTraceSysSetuid        = "trace_sys_setuid"
+	ProbeProgTraceSysUnlinkat      = "trace_sys_unlinkat"
+	ProbeVarUnusedBpf              = "unused_bpf"
 	ProbeVarUnusedExec             = "unused_exec"
+	ProbeVarUnusedModule           = "unused_module"
+	ProbeVarUnusedMount            = "unused_mount"
 	ProbeVarUnusedNet              = "unused_net"
 	ProbeVarUnusedOom              = "unused_oom"
 	ProbeVarUnusedOpen             = "unused_open"
+	ProbeVarUnusedSetuid           = "unused_setuid"
 	ProbeVarUnusedSignal           = "unused_signal"
+	ProbeVarUnusedUnlink           = "unused_unlink"
 )
 
 // LoadProbe returns the embedded CollectionSpec for Probe.
@@ -74,9 +85,15 @@ type ProbeSpecs struct {
 type ProbeProgramSpecs struct {
 	TraceInetSockSetState *ebpf.ProgramSpec `ebpf:"trace_inet_sock_set_state"`
 	TraceOomMarkVictim    *ebpf.ProgramSpec `ebpf:"trace_oom_mark_victim"`
+	TraceSysBpf           *ebpf.ProgramSpec `ebpf:"trace_sys_bpf"`
 	TraceSysExecve        *ebpf.ProgramSpec `ebpf:"trace_sys_execve"`
+	TraceSysFinitModule   *ebpf.ProgramSpec `ebpf:"trace_sys_finit_module"`
+	TraceSysInitModule    *ebpf.ProgramSpec `ebpf:"trace_sys_init_module"`
 	TraceSysKill          *ebpf.ProgramSpec `ebpf:"trace_sys_kill"`
+	TraceSysMount         *ebpf.ProgramSpec `ebpf:"trace_sys_mount"`
 	TraceSysOpenat        *ebpf.ProgramSpec `ebpf:"trace_sys_openat"`
+	TraceSysSetuid        *ebpf.ProgramSpec `ebpf:"trace_sys_setuid"`
+	TraceSysUnlinkat      *ebpf.ProgramSpec `ebpf:"trace_sys_unlinkat"`
 }
 
 // ProbeMapSpecs contains maps before they are loaded into the kernel.
@@ -91,11 +108,16 @@ type ProbeMapSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type ProbeVariableSpecs struct {
+	UnusedBpf    *ebpf.VariableSpec `ebpf:"unused_bpf"`
 	UnusedExec   *ebpf.VariableSpec `ebpf:"unused_exec"`
+	UnusedModule *ebpf.VariableSpec `ebpf:"unused_module"`
+	UnusedMount  *ebpf.VariableSpec `ebpf:"unused_mount"`
 	UnusedNet    *ebpf.VariableSpec `ebpf:"unused_net"`
 	UnusedOom    *ebpf.VariableSpec `ebpf:"unused_oom"`
 	UnusedOpen   *ebpf.VariableSpec `ebpf:"unused_open"`
+	UnusedSetuid *ebpf.VariableSpec `ebpf:"unused_setuid"`
 	UnusedSignal *ebpf.VariableSpec `ebpf:"unused_signal"`
+	UnusedUnlink *ebpf.VariableSpec `ebpf:"unused_unlink"`
 }
 
 // ProbeObjects contains all objects after they have been loaded into the kernel.
@@ -133,11 +155,16 @@ func (m *ProbeMaps) Close() error {
 //
 // It can be passed to LoadProbeObjects or ebpf.CollectionSpec.LoadAndAssign.
 type ProbeVariables struct {
+	UnusedBpf    *ebpf.Variable `ebpf:"unused_bpf"`
 	UnusedExec   *ebpf.Variable `ebpf:"unused_exec"`
+	UnusedModule *ebpf.Variable `ebpf:"unused_module"`
+	UnusedMount  *ebpf.Variable `ebpf:"unused_mount"`
 	UnusedNet    *ebpf.Variable `ebpf:"unused_net"`
 	UnusedOom    *ebpf.Variable `ebpf:"unused_oom"`
 	UnusedOpen   *ebpf.Variable `ebpf:"unused_open"`
+	UnusedSetuid *ebpf.Variable `ebpf:"unused_setuid"`
 	UnusedSignal *ebpf.Variable `ebpf:"unused_signal"`
+	UnusedUnlink *ebpf.Variable `ebpf:"unused_unlink"`
 }
 
 // ProbePrograms contains all programs after they have been loaded into the kernel.
@@ -146,18 +173,30 @@ type ProbeVariables struct {
 type ProbePrograms struct {
 	TraceInetSockSetState *ebpf.Program `ebpf:"trace_inet_sock_set_state"`
 	TraceOomMarkVictim    *ebpf.Program `ebpf:"trace_oom_mark_victim"`
+	TraceSysBpf           *ebpf.Program `ebpf:"trace_sys_bpf"`
 	TraceSysExecve        *ebpf.Program `ebpf:"trace_sys_execve"`
+	TraceSysFinitModule   *ebpf.Program `ebpf:"trace_sys_finit_module"`
+	TraceSysInitModule    *ebpf.Program `ebpf:"trace_sys_init_module"`
 	TraceSysKill          *ebpf.Program `ebpf:"trace_sys_kill"`
+	TraceSysMount         *ebpf.Program `ebpf:"trace_sys_mount"`
 	TraceSysOpenat        *ebpf.Program `ebpf:"trace_sys_openat"`
+	TraceSysSetuid        *ebpf.Program `ebpf:"trace_sys_setuid"`
+	TraceSysUnlinkat      *ebpf.Program `ebpf:"trace_sys_unlinkat"`
 }
 
 func (p *ProbePrograms) Close() error {
 	return _ProbeClose(
 		p.TraceInetSockSetState,
 		p.TraceOomMarkVictim,
+		p.TraceSysBpf,
 		p.TraceSysExecve,
+		p.TraceSysFinitModule,
+		p.TraceSysInitModule,
 		p.TraceSysKill,
+		p.TraceSysMount,
 		p.TraceSysOpenat,
+		p.TraceSysSetuid,
+		p.TraceSysUnlinkat,
 	)
 }
 

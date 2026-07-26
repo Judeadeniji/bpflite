@@ -20,7 +20,7 @@ type Loader struct {
 	reader *ringbuf.Reader
 }
 
-func New(traceExec bool, traceOpen bool, traceNet bool, traceSignal bool, traceOom bool, filterPID uint32) (*Loader, error) {
+func New(traceExec, traceOpen, traceNet, traceSignal, traceOom, traceUnlink, traceMount, traceSetuid, traceBpf, traceModule bool, filterPID uint32) (*Loader, error) {
 	if err := rlimit.RemoveMemlock(); err != nil {
 		return nil, fmt.Errorf("remove memlock: %w", err)
 	}
@@ -95,6 +95,64 @@ func New(traceExec bool, traceOpen bool, traceNet bool, traceSignal bool, traceO
 			return nil, fmt.Errorf("attach oom/mark_victim tracepoint: %w", err)
 		}
 		links = append(links, tp)
+	}
+
+	if traceUnlink {
+		tp, err := link.Tracepoint("syscalls", "sys_enter_unlinkat", objs.TraceSysUnlinkat, nil)
+		if err != nil {
+			for _, ln := range links { ln.Close() }
+			objs.Close()
+			return nil, fmt.Errorf("attach sys_enter_unlinkat tracepoint: %w", err)
+		}
+		links = append(links, tp)
+	}
+
+	if traceMount {
+		tp, err := link.Tracepoint("syscalls", "sys_enter_mount", objs.TraceSysMount, nil)
+		if err != nil {
+			for _, ln := range links { ln.Close() }
+			objs.Close()
+			return nil, fmt.Errorf("attach sys_enter_mount tracepoint: %w", err)
+		}
+		links = append(links, tp)
+	}
+
+	if traceSetuid {
+		tp, err := link.Tracepoint("syscalls", "sys_enter_setuid", objs.TraceSysSetuid, nil)
+		if err != nil {
+			for _, ln := range links { ln.Close() }
+			objs.Close()
+			return nil, fmt.Errorf("attach sys_enter_setuid tracepoint: %w", err)
+		}
+		links = append(links, tp)
+	}
+
+	if traceBpf {
+		tp, err := link.Tracepoint("syscalls", "sys_enter_bpf", objs.TraceSysBpf, nil)
+		if err != nil {
+			for _, ln := range links { ln.Close() }
+			objs.Close()
+			return nil, fmt.Errorf("attach sys_enter_bpf tracepoint: %w", err)
+		}
+		links = append(links, tp)
+	}
+
+	if traceModule {
+		tp1, err := link.Tracepoint("syscalls", "sys_enter_finit_module", objs.TraceSysFinitModule, nil)
+		if err != nil {
+			for _, ln := range links { ln.Close() }
+			objs.Close()
+			return nil, fmt.Errorf("attach sys_enter_finit_module tracepoint: %w", err)
+		}
+		links = append(links, tp1)
+
+		tp2, err := link.Tracepoint("syscalls", "sys_enter_init_module", objs.TraceSysInitModule, nil)
+		if err != nil {
+			for _, ln := range links { ln.Close() }
+			objs.Close()
+			return nil, fmt.Errorf("attach sys_enter_init_module tracepoint: %w", err)
+		}
+		links = append(links, tp2)
 	}
 
 	rd, err := ringbuf.NewReader(objs.Events)
@@ -179,6 +237,65 @@ func (l *Loader) ReadEvent() (interface{}, error) {
 			return nil, fmt.Errorf("decode oom event: %w", err)
 		}
 		return &e, nil
+	case event.TypeUnlink:
+		var raw struct {
+			Type     uint32
+			Pid      uint32
+			Comm     [16]byte
+			Pathname [256]byte
+		}
+		if err := binary.Read(bytes.NewReader(record.RawSample), binary.LittleEndian, &raw); err != nil {
+			return nil, fmt.Errorf("decode unlink event: %w", err)
+		}
+		return event.NewUnlinkEvent(raw.Pid, string(raw.Comm[:]), string(raw.Pathname[:])), nil
+	case event.TypeMount:
+		var raw struct {
+			Type    uint32
+			Pid     uint32
+			Comm    [16]byte
+			DevName [256]byte
+			DirName [256]byte
+			FsType  [16]byte
+			Flags   uint64
+		}
+		if err := binary.Read(bytes.NewReader(record.RawSample), binary.LittleEndian, &raw); err != nil {
+			return nil, fmt.Errorf("decode mount event: %w", err)
+		}
+		return event.NewMountEvent(raw.Pid, string(raw.Comm[:]), string(raw.DevName[:]), string(raw.DirName[:]), string(raw.FsType[:]), raw.Flags), nil
+	case event.TypeSetuid:
+		var raw struct {
+			Type uint32
+			Pid  uint32
+			Comm [16]byte
+			Uid  uint32
+		}
+		if err := binary.Read(bytes.NewReader(record.RawSample), binary.LittleEndian, &raw); err != nil {
+			return nil, fmt.Errorf("decode setuid event: %w", err)
+		}
+		return event.NewSetuidEvent(raw.Pid, string(raw.Comm[:]), raw.Uid), nil
+	case event.TypeBpf:
+		var raw struct {
+			Type uint32
+			Pid  uint32
+			Comm [16]byte
+			Cmd  int32
+		}
+		if err := binary.Read(bytes.NewReader(record.RawSample), binary.LittleEndian, &raw); err != nil {
+			return nil, fmt.Errorf("decode bpf event: %w", err)
+		}
+		return event.NewBpfEvent(raw.Pid, string(raw.Comm[:]), raw.Cmd), nil
+	case event.TypeModule:
+		var raw struct {
+			Type uint32
+			Pid  uint32
+			Comm [16]byte
+			Name [64]byte
+		}
+		if err := binary.Read(bytes.NewReader(record.RawSample), binary.LittleEndian, &raw); err != nil {
+			return nil, fmt.Errorf("decode module event: %w", err)
+		}
+		return event.NewModuleEvent(raw.Pid, string(raw.Comm[:]), string(raw.Name[:])), nil
+
 
 	default:
 		return nil, fmt.Errorf("unknown event type: %d", header.Type)
